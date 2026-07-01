@@ -1,9 +1,46 @@
+# 编译产物
 *.exe
+*.out
+server
+xiaozhi-*
+cmd/server/server
+cmd/mqtt/mqtt
+cmd/mock_ai_server/mock_ai_server
+cmd/opus_example/opus_example
+
+# 日志
 *.log
+/tmp/logs/
+
+# 运行时数据
+tmp/
+data/
+uploads/
+downloads/
+
+# 配置文件（含敏感信息）
 *.pem
 *.key
-dist/
-node_modules/
+.env
+.env.*
 config_shijingbo.json
 config_shijingbo.yaml
+
+# IDE
 .idea
+.vscode
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# macOS binary libraries (platform-specific build artifacts)
+# Large binary files; download manually. See AGENTS.md for details.
+*.dylib
+
+# 依赖目录
+dist/
+node_modules/
+vendor/

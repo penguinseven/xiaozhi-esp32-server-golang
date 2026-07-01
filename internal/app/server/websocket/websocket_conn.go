@@ -43,6 +43,10 @@ func NewWebSocketConn(conn *websocket.Conn, deviceID string, isMqttUdpBridge boo
 		recvAudioChan:   make(chan []byte, 100),
 	}
 
+	// 记录连接信息
+	remoteAddr := conn.RemoteAddr().String()
+	log.Infof("[连接生命周期] WebSocket连接已建立 — 设备ID: %s, 远程地址: %s, 传输模式: %s", deviceID, remoteAddr, map[bool]string{true: "MQTT-UDP桥接", false: "直连"}[isMqttUdpBridge])
+
 	// 设置pong处理器
 	conn.SetPongHandler(func(appData string) error {
 		log.Debugf("收到pong消息，设备ID: %s", deviceID)
@@ -58,7 +62,7 @@ func NewWebSocketConn(conn *websocket.Conn, deviceID string, isMqttUdpBridge boo
 			select {
 			case <-ticker.C:
 				if err := instance.conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second)); err != nil {
-					log.Errorf("发送ping消息失败，设备ID: %s, 错误: %v", deviceID, err)
+					log.Warnf("[连接生命周期] WebSocket心跳失败，设备将断开 — 设备ID: %s, 远程地址: %s, 错误: %v", deviceID, instance.conn.RemoteAddr().String(), err)
 					// 心跳失败，关闭连接
 					for _, cb := range instance.onCloseCbList {
 						cb(instance.deviceID)
@@ -80,7 +84,7 @@ func NewWebSocketConn(conn *websocket.Conn, deviceID string, isMqttUdpBridge boo
 			default:
 				msgType, audio, err := instance.conn.ReadMessage()
 				if err != nil {
-					log.Errorf("read message error: %v", err)
+					log.Infof("[连接生命周期] WebSocket读取消息结束，设备将断开 — 设备ID: %s, 错误: %v", deviceID, err)
 					for _, cb := range instance.onCloseCbList {
 						cb(instance.deviceID) //通知注册方退出
 					}
@@ -223,9 +227,11 @@ func (w *WebSocketConn) Close() error {
 
 	w.closed = true
 	w.cancel()
+	remoteAddr := w.conn.RemoteAddr().String()
 	w.conn.Close()
 	close(w.recvCmdChan)
 	close(w.recvAudioChan)
+	log.Infof("[连接生命周期] WebSocket连接已关闭 — 设备ID: %s, 远程地址: %s", w.deviceID, remoteAddr)
 	return nil
 }
 

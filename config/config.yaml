@@ -29,9 +29,8 @@ chat_hooks:
       priority: 100
 
 config_provider:          #对应domain/config/中的provider
-  type: "manager"         #现在可以是 manager, redis
-  enable_periodic_update: true  #是否启用周期性配置更新
-  update_interval: "5m"   #配置更新间隔，支持时间单位如 "5m", "1h", "30s"
+  type: "memory"          #现在可以是 manager, redis, memory (memory无需外部依赖)
+  enable_periodic_update: false  #是否启用周期性配置更新
 
 manager:                  #内控管理配置, 对应domain/config/manager/manager.go
   backend_url: "http://127.0.0.1:8080" #内控地址
@@ -44,7 +43,7 @@ system_prompt: "你是一个叫小智/小志的台湾女孩，说话机车，声
 
 # 日志配置
 log:
-  path: "../logs/"      # 日志文件存储路径
+  path: "./tmp/logs/"      # 日志文件存储路径
   file: "server.log"    # 日志文件名
   level: "debug"        # 日志级别（debug/info/warn/error）
   max_age: 3           # 日志文件最大保存天数
@@ -93,7 +92,7 @@ mqtt_server:
 
 # UDP服务配置
 udp:
-  external_host: "127.0.0.1"  # 外部访问地址, hello消息时下发的地址
+  external_host: "192.168.8.114"  # 外部访问地址, hello消息时下发的地址
   external_port: 8990         # 外部访问端口, hello消息时下发的端口
   listen_host: "0.0.0.0"      # 监听地址
   listen_port: 8990           # 监听端口
@@ -356,10 +355,10 @@ ota:
   # 测试环境配置，内部测试用
   test:
     websocket:
-      url: "ws://192.168.208.214:8989/xiaozhi/v1/"  # WebSocket地址
+      url: "ws://192.168.8.114:8989/xiaozhi/v1/"  # WebSocket地址
     mqtt:
-      enable: false                # 当为true时，会将 mqtt 配置给设备
-      endpoint: "192.168.208.214"  # MQTT端点，可以带端口
+      enable: true                 # 当为true时，会将 mqtt 配置给设备
+      endpoint: "192.168.8.114:2883"  # MQTT端点，可以带端口
   # 外部环境配置，线上环境用
   external:
     websocket:
@@ -372,7 +371,7 @@ ota:
 mcp:
   # 全局MCP服务器配置
   global:
-    enabled: true  # 是否启用全局MCP
+    enabled: false            # 是否启用全局MCP（临时关闭，保留配置结构便于恢复）
     servers:
       # 文件系统MCP服务器
       - name: "filesystem"

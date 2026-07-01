@@ -1028,6 +1028,8 @@ func (c *ChatManager) finishSessionStart(session *ChatSession, allowFreshHello b
 }
 
 func (c *ChatManager) handleSessionClosed(session *ChatSession, reason string) {
+	deviceID := session.GetDeviceID()
+	log.Infof("[连接生命周期] ChatSession关闭回调 — 设备ID: %s, 原因: %s", deviceID, reason)
 	var waitCh chan struct{}
 
 	c.cancelRetainedSessionCleanup("session_closed")
@@ -1103,6 +1105,18 @@ func (c *ChatManager) shutdown(closeTransport bool) error {
 	c.closeOnce.Do(func() {
 		c.cancelRetainedSessionCleanup("manager_shutdown")
 
+		deviceID := ""
+		if c.clientState != nil {
+			deviceID = c.clientState.DeviceID
+		} else {
+			deviceID = c.DeviceID
+		}
+		if deviceID != "" {
+			log.Infof("[连接生命周期] ChatManager开始关闭 — 设备ID: %s, 传输协议: %s", deviceID, c.serverTransport.GetTransportType())
+		} else {
+			log.Infof("[连接生命周期] ChatManager开始关闭")
+		}
+
 		if c.clientState != nil {
 			log.Infof("关闭 ChatManager, 设备 %s", c.clientState.DeviceID)
 		}
@@ -1155,7 +1169,11 @@ func (c *ChatManager) Close() error {
 }
 
 func (c *ChatManager) OnClose(deviceId string) {
-	log.Infof("设备 %s 断开连接", deviceId)
+	transportType := ""
+	if c.serverTransport != nil {
+		transportType = c.serverTransport.GetTransportType()
+	}
+	log.Infof("[连接生命周期] 连接断开回调 — 设备ID: %s, 传输协议: %s, managerClosing: %v", deviceId, transportType, c.managerClosing.Load())
 	if c.managerClosing.Load() {
 		return
 	}

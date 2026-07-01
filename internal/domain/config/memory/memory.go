@@ -7,6 +7,8 @@ import (
 
 	"xiaozhi-esp32-server-golang/internal/domain/config/types"
 	log "xiaozhi-esp32-server-golang/logger"
+
+	"github.com/spf13/viper"
 )
 
 // MemoryUserConfigProvider 内存用户配置提供者
@@ -53,11 +55,49 @@ func (m *MemoryUserConfigProvider) GetUserConfig(ctx context.Context, userID str
 
 	config, exists := m.configs[userID]
 	if !exists {
-		log.Log().Debugf("用户 %s 配置不存在，返回空配置", userID)
-		return types.UConfig{}, nil
+		log.Log().Debugf("用户 %s 配置不存在，使用本地配置文件配置", userID)
+		return buildDefaultConfig(), nil
 	}
 
 	return config, nil
+}
+
+// buildDefaultConfig 从本地 config.yaml 构建默认配置
+func buildDefaultConfig() types.UConfig {
+	return types.UConfig{
+		SystemPrompt: viper.GetString("system_prompt"),
+		Asr: types.AsrConfig{
+			Provider: viper.GetString("asr.provider"),
+			Config:   getSubConfig("asr." + viper.GetString("asr.provider")),
+		},
+		Tts: types.TtsConfig{
+			Provider: viper.GetString("tts.provider"),
+			Config:   getSubConfig("tts." + viper.GetString("tts.provider")),
+		},
+		Llm: types.LlmConfig{
+			Provider: viper.GetString("llm.provider"),
+			Config:   getSubConfig("llm." + viper.GetString("llm.provider")),
+		},
+		Vad: types.VadConfig{
+			Provider: viper.GetString("vad.provider"),
+			Config:   getSubConfig("vad." + viper.GetString("vad.provider")),
+		},
+		Memory: types.MemoryConfig{
+			Provider: viper.GetString("memory.provider"),
+			Config:   getSubConfig("memory." + viper.GetString("memory.provider")),
+		},
+		MemoryMode:      "short",
+		SpeakerChatMode: "off",
+	}
+}
+
+// getSubConfig 获取 viper 中指定前缀的配置并转为 map
+func getSubConfig(prefix string) map[string]interface{} {
+	cfg := viper.GetStringMap(prefix)
+	if cfg == nil {
+		return make(map[string]interface{})
+	}
+	return cfg
 }
 
 // SetUserConfig 设置用户配置
@@ -135,6 +175,39 @@ func (m *MemoryUserConfigProvider) ListUserIDs() []string {
 func (m *MemoryUserConfigProvider) GetSystemConfig(ctx context.Context) (string, error) {
 	// 内存配置提供者不提供系统配置
 	return "", nil
+}
+
+// IsDeviceActivated 检查设备是否已激活
+func (m *MemoryUserConfigProvider) IsDeviceActivated(ctx context.Context, deviceId string, clientId string) (bool, error) {
+	return true, nil
+}
+
+// GetActivationInfo 获取设备激活信息
+func (m *MemoryUserConfigProvider) GetActivationInfo(ctx context.Context, deviceId string, clientId string) (string, string, string, int) {
+	return "", "", "", 0
+}
+
+// VerifyChallenge 校验设备激活挑战
+func (m *MemoryUserConfigProvider) VerifyChallenge(ctx context.Context, deviceId string, clientId string, activationPayload types.ActivationPayload) (bool, error) {
+	return true, nil
+}
+
+// SwitchDeviceRoleByName 按角色名切换设备角色
+func (m *MemoryUserConfigProvider) SwitchDeviceRoleByName(ctx context.Context, deviceID string, roleName string) (string, error) {
+	return "", nil
+}
+
+// RestoreDeviceDefaultRole 恢复设备默认角色
+func (m *MemoryUserConfigProvider) RestoreDeviceDefaultRole(ctx context.Context, deviceID string) error {
+	return nil
+}
+
+// NotifyDeviceEvent 通知设备事件
+func (m *MemoryUserConfigProvider) NotifyDeviceEvent(ctx context.Context, eventType string, eventData map[string]interface{}) {
+}
+
+// RegisterMessageEventHandler 注册消息事件处理函数
+func (m *MemoryUserConfigProvider) RegisterMessageEventHandler(ctx context.Context, eventType string, eventHandler types.EventHandler) {
 }
 
 // Init 初始化Memory配置提供者

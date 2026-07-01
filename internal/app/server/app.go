@@ -316,9 +316,11 @@ func (a *App) OnNewConnection(transport types.IConn) {
 	transportType := transport.GetTransportType()
 	notifyLifecycleOnManager := transportType != types.TransportTypeMqttUdp
 
+	log.Infof("[连接生命周期] 收到新的设备连接 — 设备ID: %s, 传输协议: %s", deviceID, transportType)
+
 	// 检查是否已存在该设备的ChatManager
 	if existingManager, exists := a.chatManagers.Get(deviceID); exists {
-		log.Infof("设备 %s 已存在ChatManager，先关闭旧的连接", deviceID)
+		log.Infof("[连接生命周期] 设备 %s 已存在ChatManager，先关闭旧的连接（传输协议: %s）", deviceID, transportType)
 		// 关闭旧的ChatManager
 		existingManager.Close()
 		a.chatManagers.Remove(deviceID)
@@ -338,7 +340,7 @@ func (a *App) OnNewConnection(transport types.IConn) {
 		a.DeviceOnline(deviceID)
 	}
 
-	log.Infof("设备 %s 的ChatManager已创建并存储", deviceID)
+	log.Infof("[连接生命周期] 设备 %s 的ChatManager已创建并存储（传输协议: %s, notifyManager: %v）", deviceID, transportType, notifyLifecycleOnManager)
 
 	// OpenClaw离线消息补发（延迟重试，避免连接刚建立时会话尚未初始化）
 	go a.replayOpenClawOfflineMessages(deviceID)
@@ -349,7 +351,7 @@ func (a *App) OnNewConnection(transport types.IConn) {
 			// ChatManager结束时，从映射中移除
 			if storedManager, exists := a.chatManagers.Get(deviceID); exists && storedManager == chatManager {
 				a.chatManagers.Remove(deviceID)
-				log.Infof("设备 %s 的ChatManager已从映射中移除", deviceID)
+				log.Infof("[连接生命周期] 设备 %s 的ChatManager运行结束，已从映射中移除（传输协议: %s）", deviceID, transportType)
 				if notifyLifecycleOnManager {
 					a.DeviceOffline(deviceID)
 				}

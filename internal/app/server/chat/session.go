@@ -112,6 +112,11 @@ type ChatSession struct {
 	closeHandler func(session *ChatSession, reason string)
 }
 
+// GetDeviceID 获取设备ID
+func (s *ChatSession) GetDeviceID() string {
+	return s.clientState.DeviceID
+}
+
 type ChatSessionOption func(*ChatSession)
 
 func WithChatSessionCloseHandler(handler func(session *ChatSession, reason string)) ChatSessionOption {
