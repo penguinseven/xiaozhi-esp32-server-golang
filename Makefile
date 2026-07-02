@@ -6,7 +6,7 @@
 
 BINARY           ?= xiaozhi-server
 GO               ?= go
-CGO_ENABLED      ?= 1
+CGO_ENABLED      := 1
 
 # 配置文件路径
 CONFIG           ?= config/config.yaml
@@ -117,16 +117,17 @@ setup-onnx:
 	sudo cp onnxruntime-osx-x86_64-1.21.0/lib/libonnxruntime*.dylib /usr/local/lib/ && \
 	$(call info,OnnxRuntime 安装完成)
 
+# 编译时自动启用 CGO
+export CGO_ENABLED
+
 # ─── 编译 ──────────────────────────────────────
 
 .PHONY: build build-manager build-aio build-all
 
-build: export CGO_ENABLED=$(CGO_ENABLED)
 build:
 	$(call info,编译主程序（不带管理后台）...)
 	$(GO) build -o $(BINARY) $(CMD_SERVER)
 
-build-manager: export CGO_ENABLED=$(CGO_ENABLED)
 build-manager:
 	$(call info,编译管理后台后端...)
 	cd $(MANAGER_DIR) && $(GO) build -o main .
@@ -145,14 +146,13 @@ build-all: build build-manager
 
 .PHONY: run run-with-manager
 
-run: export CGO_ENABLED=$(CGO_ENABLED)
 run:
 	$(call info,启动主程序...)
 	$(GO) run $(CMD_SERVER) -c $(CONFIG)
 
 run-with-manager: frontend-copy
 	$(call info,启动主程序（带管理后台）...)
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) run \
+	$(GO) run \
 	  -tags "$(TAGS_MANAGER) $(TAGS_EMBED_UI)" \
 	  $(CMD_SERVER) \
 	  -c $(CONFIG) \
