@@ -135,7 +135,7 @@ vad:
 
 # 自动语音识别（ASR）配置
 asr:
-  provider: "funasr"  # ASR provider: funasr / aliyun_funasr / doubao / aliyun_qwen3 / xunfei
+  provider: "doubao"  # ASR provider: funasr / aliyun_funasr / doubao / aliyun_qwen3 / xunfei
   # FunASR配置
   funasr:
     host: "127.0.0.1"          # FunASR服务器地址
@@ -161,8 +161,8 @@ asr:
 
   # Doubao ASR config
   doubao:
-    appid: "xxx"                    # 应用ID
-    access_token: "xxx-Cu"          # 访问令牌
+    appid: "4170815771"                    # 应用ID
+    access_token: "lBGmAR-5RH6OJWiPYo0nxv3GzIMLFKO6"          # 访问令牌
     ws_url: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"  # WebSocket URL
     model_name: "bigmodel"          # 模型名称
     end_window_size: 800            # 结束窗口大小
@@ -186,7 +186,7 @@ asr:
 
 # 文本转语音（TTS）配置
 tts:
-  provider: "doubao_ws"  # TTS提供商：xiaozhi/doubao/doubao_ws/cosyvoice/edge/edge_offline/xunfei/xunfei_super_tts
+  provider: "edge"  # TTS提供商：xiaozhi/doubao/doubao_ws/cosyvoice/edge/edge_offline/xunfei/xunfei_super_tts
   openai:  #openai兼容格式的tts服务, 这里使用硅基流动服务
     api_key: "xxxx" #apikey
     api_url: "https://api.siliconflow.cn/v1/audio/speech"
@@ -204,11 +204,11 @@ tts:
     api_url: "https://openspeech.bytedance.com/api/v3/tts/unidirectional"  # API地址
   # 豆包TTS配置（WebSocket方式），支持流式输出
   doubao_ws:
-    appid: "6886011847"                         # 应用ID
-    access_token: "access_token"                # 访问令牌
+    appid: "4170815771"                         # 应用ID
+    access_token: "lBGmAR-5RH6OJWiPYo0nxv3GzIMLFKO6"                # 访问令牌
     model: "seed-tts-1.1"                       # 模型
     resource_id: ""                             # 可选，建议填写控制台里的实例 ID，如 TTS-SeedTTS2.xxxxx
-    voice: ""                                   # 语音模型
+    voice: "BV001_streaming" # 语音模型（通用免费音色）
     ws_url: "wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream"  # WebSocket 地址
   # CosyVoice TTS配置
   cosyvoice:
@@ -283,13 +283,20 @@ tts:
 
 # 大语言模型（LLM）配置
 llm:
-  provider: "qwen_72b"  # 默认使用的LLM提供商
+  provider: "deepseek_v4_flash"  # 默认使用的LLM提供商
   # DeepSeek V3模型配置（硅基流动平台）
   deepseek:
     type: "openai"                               # 接口类型
     model_name: "Pro/deepseek-ai/DeepSeek-V3"    # 模型名称
     api_key: "api_key"                           # API密钥
     base_url: "https://api.siliconflow.cn/v1"    # API基础地址
+    max_tokens: 500                              # 最大生成token数
+  # DeepSeek V4 Flash模型配置（硅基流动平台）
+  deepseek_v4_flash:
+    type: "openai"                               # 接口类型
+    model_name: "deepseek-v4-flash"             # 模型名称（DeepSeek 官方模型名）
+    api_key: "sk-b479d79951b0437e87f425dc507e0fba"          # DeepSeek 官网 https://platform.deepseek.com/api_keys
+    base_url: "https://api.deepseek.com"         # API基础地址（DeepSeek 官方）
     max_tokens: 500                              # 最大生成token数
   # DeepSeek V2.5模型配置（硅基流动平台）
   deepseek2_5:
