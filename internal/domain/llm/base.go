@@ -81,10 +81,15 @@ func GetLLMProvider(providerName string, config map[string]interface{}) (LLMProv
 	llmType := resolveLLMType(providerName, cfg)
 	cfg["type"] = llmType
 	providerKey := resolveLLMProviderName(providerName, cfg, llmType)
-	if defaultBaseURL := resolveDefaultBaseURL(providerKey); defaultBaseURL != "" {
-		cfg["base_url"] = defaultBaseURL
-	} else if baseURL, _ := cfg["base_url"].(string); strings.TrimSpace(baseURL) == "" {
-		delete(cfg, "base_url")
+	// 仅在用户未显式配置 base_url 时使用 provider 的默认值，
+	// 否则会覆盖如 "https://ark.cn-beijing.volces.com/api/coding/v3" 这类自定义接入点。
+	existingBaseURL, _ := cfg["base_url"].(string)
+	if strings.TrimSpace(existingBaseURL) == "" {
+		if defaultBaseURL := resolveDefaultBaseURL(providerKey); defaultBaseURL != "" {
+			cfg["base_url"] = defaultBaseURL
+		} else {
+			delete(cfg, "base_url")
+		}
 	}
 
 	switch llmType {
