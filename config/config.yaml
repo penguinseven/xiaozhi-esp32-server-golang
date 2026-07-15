@@ -283,7 +283,7 @@ tts:
 
 # 大语言模型（LLM）配置
 llm:
-  provider: "deepseek_v4_flash"  # 默认使用的LLM提供商
+  provider: "doubao_deepseek"  # 默认使用的LLM提供商
   # DeepSeek V3模型配置（硅基流动平台）
   deepseek:
     type: "openai"                               # 接口类型
@@ -329,9 +329,9 @@ llm:
   # 豆包DeepSeek模型配置
   doubao_deepseek:
     type: "openai"                               # 接口类型
-    model_name: "deepseek-v3"                    # 模型名称
-    api_key: "api_key"                           # API密钥
-    base_url: "https://ark.cn-beijing.volces.com/api/v3"  # API基础地址
+    model_name: "deepseek-v4-flash"                    # 模型名称
+    api_key: "api_key"                           # API密钥（请勿提交真实密钥）
+    base_url: "https://ark.cn-beijing.volces.com/api/coding/v3"  # API基础地址
     max_tokens: 500                              # 最大生成token数
 
 # 视觉识别配置
