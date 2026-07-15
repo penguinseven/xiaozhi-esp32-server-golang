@@ -23,6 +23,7 @@ downloads/
 *.key
 .env
 .env.*
+config/config.local.yaml
 config_shijingbo.json
 config_shijingbo.yaml
 

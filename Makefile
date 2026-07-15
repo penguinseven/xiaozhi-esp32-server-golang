@@ -9,7 +9,8 @@ GO               ?= go
 CGO_ENABLED      := 1
 
 # 配置文件路径
-CONFIG           ?= config/config.yaml
+LOCAL_CONFIG     ?= config/config.local.yaml
+CONFIG           ?= $(if $(wildcard $(LOCAL_CONFIG)),$(LOCAL_CONFIG),config/config.yaml)
 MANAGER_CONFIG   ?= build/common/manager.json
 
 # 管理后台模块
