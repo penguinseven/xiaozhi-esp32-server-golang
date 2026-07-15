@@ -2,6 +2,22 @@
 
 本配置文件为 AI 语音物联网后端服务的主配置，涵盖了服务启动、协议接入、AI能力、日志、MCP等所有核心参数。
 
+## 本地配置文件
+
+仓库中的 `config/config.yaml` 是版本控制的默认配置。需要保存本机地址、端口或 API 密钥时，复制它创建 `config/config.local.yaml`：
+
+```bash
+cp config/config.yaml config/config.local.yaml
+```
+
+`config/config.local.yaml` 已被 Git 忽略。执行 `make run`、`make run-with-manager` 等使用 `CONFIG` 的 Makefile 目标时，若该文件存在会自动优先使用；不存在时回退到 `config/config.yaml`。
+
+本地配置是**完整替代文件**，不是与默认配置合并的覆盖文件；上游新增配置项时，请同步到本地文件。也可以显式指定其他路径：
+
+```bash
+make run-with-manager CONFIG=/path/to/config.yaml
+```
+
 ## 主要配置项说明
 
 - **server/pprof**：性能分析相关配置，建议开发/调试时开启。

@@ -245,6 +245,18 @@ CGO_ENABLED=1 go run -tags "manager embed_ui" ./cmd/server \
 
 主配置文件 `config/config.yaml` 包含所有服务模块的配置。
 
+使用 Makefile 启动时，可创建本地且不提交到 Git 的完整配置副本：
+
+```bash
+cp config/config.yaml config/config.local.yaml
+```
+
+当 `config/config.local.yaml` 存在时，`make run` 和 `make run-with-manager` 会自动使用它；不存在时使用 `config/config.yaml`。该文件为完整替代配置，不会与默认文件合并。也可以显式指定配置路径：
+
+```bash
+make run-with-manager CONFIG=/path/to/config.yaml
+```
+
 ### 6.2 关键配置项
 
 ```yaml
