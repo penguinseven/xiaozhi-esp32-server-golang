@@ -622,20 +622,31 @@ func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 		configsByType[config.Type] = append(configsByType[config.Type], config)
 	}
 
-	// 从 configs 中选出“当前使用”的一条：默认配置优先，否则第一条
+	// 从 configs 中选出"当前使用"的一条：
+	// 1) 必须是启用（Enabled=true）的记录，禁用的记录不再对外下发；
+	// 2) 启用记录里默认配置优先，否则取启用记录里的第一条；
+	// 3) 全部禁用则返回 nil，由上层跳过写入 response。
 	getSelectedConfig := func(configs []models.Config) *models.Config {
 		if len(configs) == 0 {
 			return nil
 		}
+		var firstEnabled *models.Config
 		for i := range configs {
+			if !configs[i].Enabled {
+				continue
+			}
 			if configs[i].IsDefault {
 				return &configs[i]
 			}
+			if firstEnabled == nil {
+				firstEnabled = &configs[i]
+			}
 		}
-		return &configs[0]
+		return firstEnabled
 	}
 
-	// 为每种类型选择最佳配置并解析json_data
+	// 为每种类型选择最佳配置并解析 json_data。
+	// 若全部记录被禁用则返回 nil，上层在写入 response 时会跳过该 key。
 	selectAndParseConfig := func(configs []models.Config) interface{} {
 		selected := getSelectedConfig(configs)
 		if selected == nil {
@@ -676,21 +687,13 @@ func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 		}
 	}
 
-	// 特殊处理MCP配置，将mcp和local_mcp分开
+	// 特殊处理MCP配置，将mcp和local_mcp分开；同样只考虑启用的记录
 	selectAndParseMCPConfig := func(configs []models.Config) (interface{}, interface{}) {
-		var selectedConfig models.Config
-		// 优先选择默认配置
-		for _, config := range configs {
-			if config.IsDefault {
-				selectedConfig = config
-				break
-			}
+		selected := getSelectedConfig(configs)
+		if selected == nil {
+			return nil, nil
 		}
-
-		// 如果没有默认配置，选择第一个配置
-		if selectedConfig.ID == 0 {
-			selectedConfig = configs[0]
-		}
+		selectedConfig := *selected
 
 		// 解析json_data
 		if selectedConfig.JsonData != "" {
@@ -765,31 +768,40 @@ func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 	response := gin.H{}
 
 	if configs, exists := configsByType["mqtt"]; exists && len(configs) > 0 {
-		data := selectAndParseConfig(configs)
-		/*if b, err := json.Marshal(data); err == nil {
-			log.Printf("[getSystemConfigsData] mqtt 配置: %s", string(b))
-		}*/
-		response["mqtt"] = data
-
+		if data := selectAndParseConfig(configs); data != nil {
+			/*if b, err := json.Marshal(data); err == nil {
+				log.Printf("[getSystemConfigsData] mqtt 配置: %s", string(b))
+			}*/
+			response["mqtt"] = data
+		}
 	}
 	if configs, exists := configsByType["mqtt_server"]; exists && len(configs) > 0 {
-		data := selectAndParseConfig(configs)
-		if b, err := json.Marshal(data); err == nil {
-			log.Printf("[getSystemConfigsData] mqtt_server 配置: %s", string(b))
+		if data := selectAndParseConfig(configs); data != nil {
+			if b, err := json.Marshal(data); err == nil {
+				log.Printf("[getSystemConfigsData] mqtt_server 配置: %s", string(b))
+			}
+			response["mqtt_server"] = data
 		}
-		response["mqtt_server"] = data
 	}
 	if configs, exists := configsByType["udp"]; exists && len(configs) > 0 {
-		response["udp"] = selectAndParseConfig(configs)
+		if data := selectAndParseConfig(configs); data != nil {
+			response["udp"] = data
+		}
 	}
 	if configs, exists := configsByType["ota"]; exists && len(configs) > 0 {
-		response["ota"] = selectAndParseConfig(configs)
+		if data := selectAndParseConfig(configs); data != nil {
+			response["ota"] = data
+		}
 	}
 	if configs, exists := configsByType["auth"]; exists && len(configs) > 0 {
-		response["auth"] = selectAndParseConfig(configs)
+		if data := selectAndParseConfig(configs); data != nil {
+			response["auth"] = data
+		}
 	}
 	if configs, exists := configsByType["chat"]; exists && len(configs) > 0 {
-		response["chat"] = selectAndParseConfig(configs)
+		if data := selectAndParseConfig(configs); data != nil {
+			response["chat"] = data
+		}
 	}
 
 	// 特殊处理MCP配置，将mcp和local_mcp分开
@@ -818,7 +830,9 @@ func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 
 	// 处理独立的local_mcp配置（如果存在）
 	if configs, exists := configsByType["local_mcp"]; exists && len(configs) > 0 {
-		response["local_mcp"] = selectAndParseConfig(configs)
+		if data := selectAndParseConfig(configs); data != nil {
+			response["local_mcp"] = data
+		}
 	}
 
 	// 处理知识库全局配置：knowledge.default_provider + knowledge.providers
