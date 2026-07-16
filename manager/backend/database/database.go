@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"xiaozhi/manager/backend/config"
 	"xiaozhi/manager/backend/models"
 	"xiaozhi/manager/backend/services/configprovider"
@@ -14,6 +15,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func Init(cfg config.DatabaseConfig) *gorm.DB {
@@ -21,6 +23,20 @@ func Init(cfg config.DatabaseConfig) *gorm.DB {
 	var err error
 
 	storageType := cfg.GetStorageType()
+
+	// GORM 默认会把 ErrRecordNotFound 当作 error 打印，业务里 "先查后创建" 的路径会产生噪音，
+	// 此处覆盖默认 logger，只忽略 RecordNotFound，其余日志级别/慢查询阈值保持与默认一致。
+	gormCfg := &gorm.Config{
+		Logger: gormlogger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags),
+			gormlogger.Config{
+				SlowThreshold:             200 * time.Millisecond,
+				LogLevel:                  gormlogger.Warn,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  false,
+			},
+		),
+	}
 
 	if storageType == "sqlite" {
 		if cfg.SQLite == nil {
@@ -34,7 +50,7 @@ func Init(cfg config.DatabaseConfig) *gorm.DB {
 			return nil
 		}
 		log.Println("使用SQLite数据库:", cfg.SQLite.FilePath)
-		db, err = gorm.Open(sqlite.Open(cfg.SQLite.FilePath), &gorm.Config{})
+		db, err = gorm.Open(sqlite.Open(cfg.SQLite.FilePath), gormCfg)
 	} else {
 		if cfg.MySQL == nil {
 			log.Println("MySQL配置为空，将使用fallback模式运行（硬编码用户验证）")
@@ -43,7 +59,7 @@ func Init(cfg config.DatabaseConfig) *gorm.DB {
 		// MySQL 数据库连接
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 			cfg.MySQL.Username, cfg.MySQL.Password, cfg.MySQL.Host, cfg.MySQL.Port, cfg.MySQL.Database)
-		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		db, err = gorm.Open(mysql.Open(dsn), gormCfg)
 	}
 
 	if err != nil {
