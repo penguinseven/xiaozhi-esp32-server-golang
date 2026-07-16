@@ -3,7 +3,9 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -358,6 +360,12 @@ func (c *ChatManager) cmdMessageLoop(ctx context.Context) {
 
 		message, err := c.serverTransport.RecvCmd(ctx, 120)
 		if err != nil {
+			// context canceled / EOF 都是正常关闭路径（例如 OTA 测试连一次就 close、设备主动断开），
+			// 按 debug 打并立即退出循环，避免刷屏与误报。
+			if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || errors.Is(err, context.DeadlineExceeded) {
+				log.Debugf("设备 %s recv cmd 正常退出: %v", c.DeviceID, err)
+				return
+			}
 			log.Errorf("recv cmd error: %v", err)
 			recvFailCount++
 			continue
@@ -387,6 +395,10 @@ func (c *ChatManager) audioMessageLoop(ctx context.Context) {
 
 		message, err := c.serverTransport.RecvAudio(ctx, 600)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || errors.Is(err, context.DeadlineExceeded) {
+				log.Debugf("设备 %s recv audio 正常退出: %v", c.DeviceID, err)
+				return
+			}
 			log.Errorf("recv audio error: %v", err)
 			return
 		}
