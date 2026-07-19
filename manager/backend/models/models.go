@@ -45,6 +45,9 @@ type Device struct {
 	PreSecretKey string     `json:"pre_secret_key" gorm:"type:varchar(128)"`                                  // 预激活密钥
 	Activated    bool       `json:"activated" gorm:"default:false"`                                           // 设备是否已激活
 	LastActiveAt *time.Time `json:"last_active_at"`
+	// Online 表示接入层认为设备当前是否在线（由 broker/传输层事件驱动）。
+	// 与 LastActiveAt 的语义区分：LastActiveAt 只记录"最近一次可见时间"，Online 才是判在线的真源。
+	Online       bool       `json:"online" gorm:"not null;default:false;index"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }

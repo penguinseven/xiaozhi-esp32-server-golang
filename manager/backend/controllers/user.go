@@ -893,17 +893,15 @@ func (uc *UserController) GetDashboardStats(c *gin.Context) {
 		uc.DB.Model(&models.User{}).Count(&stats.TotalUsers)
 		uc.DB.Model(&models.Device{}).Count(&stats.TotalDevices)
 		uc.DB.Model(&models.Agent{}).Count(&stats.TotalAgents)
-		// 在线设备：最近5分钟内活跃的设备
-		fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
-		uc.DB.Model(&models.Device{}).Where("last_active_at > ?", fiveMinutesAgo).Count(&stats.OnlineDevices)
+		// 在线设备：以事件驱动的 online 列为准（接入层显式上下线维护）
+		uc.DB.Model(&models.Device{}).Where("online = ?", true).Count(&stats.OnlineDevices)
 	} else {
 		// 普通用户只查看自己的数据
 		stats.TotalUsers = 0 // 普通用户不显示用户数
 		uc.DB.Model(&models.Device{}).Where("user_id = ?", userID).Count(&stats.TotalDevices)
 		uc.DB.Model(&models.Agent{}).Where("user_id = ?", userID).Count(&stats.TotalAgents)
-		// 在线设备：用户自己的最近5分钟内活跃的设备
-		fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
-		uc.DB.Model(&models.Device{}).Where("user_id = ? AND last_active_at > ?", userID, fiveMinutesAgo).Count(&stats.OnlineDevices)
+		// 在线设备：以事件驱动的 online 列为准
+		uc.DB.Model(&models.Device{}).Where("user_id = ? AND online = ?", userID, true).Count(&stats.OnlineDevices)
 	}
 
 	c.JSON(http.StatusOK, stats)

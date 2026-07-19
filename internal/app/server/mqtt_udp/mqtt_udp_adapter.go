@@ -42,7 +42,32 @@ type MqttUdpAdapter struct {
 	offlineGracePeriod time.Duration
 	stopCtx            context.Context
 	stopCancel         context.CancelFunc
+	// lastPresenceRenewNs 记录每台设备最近一次 online 事件"续期"的 unix 纳秒时间戳，
+	// 用于节流：设备真实发包/收包时每 presenceRenewInterval 才向上通知一次 onDeviceOnline，
+	// 避免高频事件把 backend 打成写风暴。
+	lastPresenceRenewNs sync.Map // map[string]int64
 	sync.RWMutex
+}
+
+// presenceRenewInterval 设备真实活跃时向上通知 online 事件的最小间隔。
+// 目的：在事件驱动的前提下把"最近可见时间"（last_active_at）刷新到 backend，
+// 让即便前端仍按 5min 时间窗判活跃，也不会误判为离线。
+const presenceRenewInterval = 60 * time.Second
+
+// notifyOnlineThrottled 节流地触发 onDeviceOnline。首次触发一定放行，
+// 之后在 presenceRenewInterval 内的重复调用会被抑制。
+func (s *MqttUdpAdapter) notifyOnlineThrottled(deviceID string) {
+	if deviceID == "" || s.onDeviceOnline == nil {
+		return
+	}
+	nowNs := time.Now().UnixNano()
+	if prev, ok := s.lastPresenceRenewNs.Load(deviceID); ok {
+		if last, _ := prev.(int64); nowNs-last < int64(presenceRenewInterval) {
+			return
+		}
+	}
+	s.lastPresenceRenewNs.Store(deviceID, nowNs)
+	s.onDeviceOnline(deviceID)
 }
 
 type mqttDeviceLifecycleState struct {
@@ -618,6 +643,11 @@ func (s *MqttUdpAdapter) processMessage() {
 			}
 			if notifyOnline && s.onDeviceOnline != nil {
 				s.onDeviceOnline(deviceId)
+				// 首次翻转 online 也记入节流窗口，避免紧接着的下一个包再打一次。
+				s.lastPresenceRenewNs.Store(deviceId, time.Now().UnixNano())
+			} else {
+				// broker 依然在线，但设备在真实发包 —— 节流地向上"续期"。
+				s.notifyOnlineThrottled(deviceId)
 			}
 			if notifyOnline && s.onTransportReady != nil {
 				s.onTransportReady(deviceId)

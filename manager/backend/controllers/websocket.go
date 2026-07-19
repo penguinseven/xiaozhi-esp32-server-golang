@@ -429,11 +429,15 @@ func (client *WebSocketClient) handleDeviceActiveRequest(request *WebSocketReque
 
 	log.Printf("处理设备活跃时间更新请求，device_id: %s", deviceID)
 
-	// 更新设备最后活跃时间
+	// 事件驱动的在线状态：online=true 由接入层显式发起
+	// LastActiveAt 只作为"最近一次可见"的辅助时间戳保留
 	now := time.Now()
 	result := client.controller.DB.Model(&models.Device{}).
 		Where("device_name = ?", deviceID).
-		Update("last_active_at", now)
+		Updates(map[string]interface{}{
+			"last_active_at": now,
+			"online":         true,
+		})
 
 	if result.Error != nil {
 		log.Printf("更新设备活跃时间失败: %v", result.Error)
@@ -451,6 +455,7 @@ func (client *WebSocketClient) handleDeviceActiveRequest(request *WebSocketReque
 	response := map[string]interface{}{
 		"device_id":      deviceID,
 		"last_active_at": now.Format(time.RFC3339),
+		"online":         true,
 		"message":        "设备活跃时间更新成功",
 	}
 
@@ -476,10 +481,12 @@ func (client *WebSocketClient) handleDeviceInactiveRequest(request *WebSocketReq
 
 	log.Printf("处理设备离线请求，device_id: %s", deviceID)
 
-	// 将设备最后活跃时间设置为0（离线状态）
+	// 事件驱动的下线：online=false；LastActiveAt 保留最后时间戳作为"最近可见"
 	result := client.controller.DB.Model(&models.Device{}).
 		Where("device_name = ?", deviceID).
-		Update("last_active_at", nil) // 设置为NULL表示离线
+		Updates(map[string]interface{}{
+			"online": false,
+		})
 
 	if result.Error != nil {
 		log.Printf("更新设备离线状态失败: %v", result.Error)
@@ -496,7 +503,7 @@ func (client *WebSocketClient) handleDeviceInactiveRequest(request *WebSocketReq
 	// 构造成功响应
 	response := map[string]interface{}{
 		"device_id":      deviceID,
-		"last_active_at": nil, // 离线状态
+		"online":         false,
 		"message":        "设备离线状态更新成功",
 	}
 
