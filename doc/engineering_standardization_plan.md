@@ -363,6 +363,173 @@ xiaozhi-esp32-server-golang/
 
 ---
 
+## 六、阶段 0：性能基准测试（前置必做）
+
+> **原则：先量化，再重构。** 任何性能重构必须以 pprof 火焰图的量化解剖为前提，拒绝盲改。
+
+### 为什么先做这步
+
+当前对性能瓶颈的判断（CGo 开销、Channel 切换、Opus 解码）都是**静态推断**，缺乏运行时数据支撑。贸然重构可能导致：
+
+- 优化了 CGo 调用，但实际瓶颈在 Channel 阻塞
+- 优化了 Opus 解码，但实际瓶颈在 ASR WebSocket 等待
+- 改造了 ASR 并发池，但实际瓶颈在 LLM 首 token 延迟
+
+pprof 能给出**精准的 CPU/内存分配占比**，让重构有的放矢。
+
+### 执行步骤
+
+#### 1. 启用 pprof
+
+项目已内置 pprof 配置，只需开启：
+
+```yaml
+# config.local.yaml
+server:
+  pprof:
+    enable: true
+    port: 6060
+```
+
+启动服务后访问 `http://localhost:6060/debug/pprof/`。
+
+#### 2. CPU Profile + 火焰图
+
+**采集条件**：设备正常对话 5 分钟（含多次 listen start -> ASR -> LLM -> TTS -> listen stop 完整周期）
+
+```sh
+# 采集 5 分钟 CPU profile
+go tool pprof -seconds=300 http://localhost:6060/debug/pprof/profile
+
+# 在 pprof 交互中生成火焰图 SVG
+(pprof) web
+
+# 或命令行直接生成 SVG
+go tool pprof -svg -seconds=300 http://localhost:6060/debug/pprof/profile > cpu_profile.svg
+```
+
+**重点观察**：
+- `runtime.cgo` 系列函数占比 -- CGo 跨语言调用开销
+- `internal/util.(*OpusRepacketizer).*` -- Opus 解码耗时
+- `runtime.chanrecv` / `runtime.chansend` -- Channel 上下文切换开销
+- `net/http.(*conn).serve` / `gorilla/websocket.*` -- 网络 I/O 等待
+- `internal/pool.(*Manager).Acquire` -- 资源池获取耗时
+
+#### 3. 内存 Profile
+
+```sh
+# 堆内存分配
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+# 生成 SVG
+go tool pprof -svg http://localhost:6060/debug/pprof/heap > heap_profile.svg
+
+# 查看 alloc_space (累计分配)
+go tool pprof -alloc_space http://localhost:6060/debug/pprof/heap
+```
+
+**重点观察**：
+- `internal/util` 音频帧分配频率 -- 是否有 GC 压力
+- `internal/app/server/chat.(*ChatSession)` 会话对象内存占用
+- `bytes.MakeCopy` / `runtime.makeslice` -- 音频帧拷贝开销
+
+#### 4. Goroutine Profile
+
+```sh
+# 查看 goroutine 堆栈
+go tool pprof http://localhost:6060/debug/pprof/goroutine
+
+# 生成 SVG
+go tool pprof -svg http://localhost:6060/debug/pprof/goroutine > goroutine_profile.svg
+```
+
+**重点观察**：
+- 每个 ASR 连接是否独立 goroutine，有无 goroutine 泄漏
+- Channel 收发阻塞的 goroutine 数量
+- `runtime.selectgo` 占比 -- 多路 select 的调度开销
+
+#### 5. Block Profile（互斥/阻塞）
+
+```sh
+# 需先在代码中开启 block profiling
+# runtime.SetBlockProfileRate(1)
+go tool pprof http://localhost:6060/debug/pprof/block
+```
+
+**重点观察**：
+- `internal/pool.(*Manager).Acquire` -- 资源池等待时间
+- Channel 收发阻塞时间 -- TTS 队列、ASR 队列
+- `sync.Mutex.Lock` -- 锁竞争热点
+
+#### 6. Benchmark 测试
+
+对关键路径编写 Benchmark，量化单次操作耗时：
+
+```go
+// internal/util/opus_repacketizer_test.go
+func BenchmarkOpusRepacketize(b *testing.B) {
+    repacketizer := NewOpusRepacketizer(...)
+    frame := make([]byte, 960) // 模拟 opus 帧
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        repacketizer.Repacketize(frame)
+    }
+}
+
+// internal/pool/manager_test.go
+func BenchmarkPoolAcquireRelease(b *testing.B) {
+    manager := NewManager(...)
+    manager.RegisterResourceType("asr", ...)
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        wrapper, _ := manager.Acquire("asr", "test")
+        manager.Release(wrapper)
+    }
+}
+
+// internal/util/sentence_test.go
+func BenchmarkSentenceSplit(b *testing.B) {
+    text := "你好这是一个用于测试句子切分性能的文本..."
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        SplitSentence(text)
+    }
+}
+```
+
+```sh
+go test -bench=. -benchmem -count=5 ./internal/util/... ./internal/pool/...
+```
+
+### 产出物
+
+完成阶段 0 后，应产出以下量化解剖报告：
+
+| 产出物 | 内容 | 用途 |
+|--------|------|------|
+| `cpu_profile.svg` | CPU 火焰图 | 定位 CPU 热点函数 |
+| `heap_profile.svg` | 堆内存火焰图 | 定位内存分配热点 |
+| `goroutine_profile.svg` | Goroutine 堆栈 | 排查 goroutine 泄漏/阻塞 |
+| `block_profile.svg` | 阻塞分析 | 定位锁/Channel 等待 |
+| `benchmark_results.txt` | Benchmark 数据 | 量化单次操作耗时 |
+| **瓶颈分析报告** | 汇总以上数据，给出优先级排序 | 指导阶段 3-4 重构 |
+
+### 瓶颈判定标准
+
+根据 pprof 数据决定后续重构优先级：
+
+| 瓶颈位置 | CPU 占比 | 优先级 | 对应重构阶段 |
+|---------|---------|--------|-------------|
+| CGo 调用（Opus/TEN-VAD） | >15% | P0 | 阶段 4：CGo 解耦 |
+| Channel 阻塞 | >10% | P1 | ASR 并发池重构 |
+| 资源池 Acquire 等待 | >5% | P2 | pool/manager 优化 |
+| GC 压力（音频帧分配） | >10% | P3 | 音频帧内存池 |
+| 网络 I/O 等待 | 占比高但正常 | -- | 非重构项，改用非阻塞 I/O |
+
+**只有当 pprof 数据确认瓶颈后，才启动对应阶段的重构。** 数据不足或瓶颈不明显时，优先做低风险的布局和配置重构（阶段 1-2）。
+
+---
+
 ## 参考标准
 
 | 标准 | 来源 |
