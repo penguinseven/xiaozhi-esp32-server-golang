@@ -1,142 +1,375 @@
-# 🛠️ 项目工程化标准与重构方案
+# 项目工程化标准与重构方案
 
-本指南立足于**现代 Go 语言企业级工程化标准（Production-Grade Standards）**和**清洁/六边形架构（Clean / Hexagonal Architecture）**，对 `xiaozhi-esp32-server-golang` 项目的代码布局、配置规划、功能划分进行深度解剖，评估其合理性、标准性，并给出具体的重构设计蓝图。
+本指南对标 **Go 官方工程规范**、**12-Factor App**、**Clean / Hexagonal Architecture** 及 **golang-standards/project-layout**，对 `xiaozhi-esp32-server-golang` 项目的代码布局、配置规划、功能划分进行深度解剖，评估其合理性、标准性，并给出具体的重构设计蓝图。
 
----
-
-## 一、 📊 现状评估与痛点分析
-
-### 1. 📂 项目布局（Layout）
-*   **合理性：7.5 / 10**（功能模块化清晰，核心领域划分明确，具备了企业级项目的基本骨架）。
-*   **标准性：5.5 / 10**（具有明显的“野蛮生长”痕迹，存在顶级目录污染、混杂的 Monorepo 管理等问题）。
-*   **核心痛点**：
-    1.  **顶级目录污染**：`logger/`、`lib/`、`storage/` 被直接置于项目根目录。在标准的 Go 工程中，除了构建、配置、文档和核心代码入口，根目录应当保持绝对干净。
-    2.  **Monorepo 缺乏协同**：项目包含三个独立的 Go Module（根目录主服务、`manager/backend/`、Git 子模块 `asr_server/`），但未配置 **Go Workspaces (`go.work`)**，导致本地联合调试、代码跳转及依赖管理极为繁琐。
-    3.  **内部目录语义混杂**：`internal/components/http/`、`internal/pkg/`、`internal/util/` 职责重叠。
-
-### 2. ⚙️ 配置规划（Configuration）
-*   **合理性：6.5 / 10**（支持多配置 Provider 模式：memory、manager、redis）。
-*   **标准性：5.0 / 10**（覆盖逻辑、格式及敏感信息管理不标准）。
-*   **核心痛点**：
-    1.  **覆盖逻辑反直觉**：`config.local.yaml` 是对 `config.yaml` 的**完整替代**，而非**合并覆盖（Merge/Override）**。当默认配置新增项时，本地配置因缺项会报运行错误。
-    2.  **配置格式与源碎片化**：项目并存 `config.yaml`、`mqtt_config.json` 以及 `asr_server/config.json`。
-    3.  **违背 12-Factor 环境变量原则**：作为高并发后端，项目不支持直接通过 OS 环境变量注入敏感信息（如 `DEEPSEEK_API_KEY`、`MYSQL_PASSWORD`），这对容器化（Docker/K8s）部署极不友好。
-
-### 3. 🧩 功能划分与分层（Functional Partitioning）
-*   **合理性：7.0 / 10**（Provider 抽象层设计良好，方便对接多家 ASR/TTS 服务）。
-*   **标准性：5.5 / 10**（框架实现泄露到领域层，CGo 强耦合导致编译笨重）。
-*   **核心痛点**：
-    1.  **具体框架向 Domain 泄露**：`internal/domain/llm/eino_llm/` 位于领域层（Domain）。Eino 是具体的 LLM 编排框架，属于**外层基础设施/适配器**（Infrastructure/Adapter）。领域层应当保持 100% 纯粹，不依赖任何第三方业务框架。
-    2.  **CGo 编译屏障严重**：主程序通过 `asr_enabled` 构建标签与 CGo 代码耦合，导致整个主服务的交叉编译非常笨重，丧失了 Go 跨平台快速分发的优势。
+所有评估结论均基于对实际代码库的扫描验证（Go 1.24.2、三个独立 Go Module、CGo 依赖、viper 配置机制、eino 框架引入范围等）。
 
 ---
 
-## 二、 🛠️ 怎么改？（Reconstruction Plan）
+## 一、现状评估与痛点分析
 
-### 1. 📁 布局重构：遵循 golang-standards 规范
-*   **参照标准**：[golang-standards/project-layout](https://github.com/golang-standards/project-layout)
-*   **重构方案**：
-    *   **收拢顶级目录**：将根目录的 `logger/` 移动至 `internal/pkg/logger/`；将 `lib/` 移动至 `internal/pkg/lib/` 或 `build/lib/`；将 `storage/` 移动至 `data/storage/`。
-    *   **启用 Go 1.20+ 工作区（Workspaces）**：在根目录下创建 `go.work`，统一管理三个独立 Go 模块。
-        ```go
-        go 1.20
-        use (
-            .
-            ./manager/backend
-            ./asr_server
-        )
-        ```
-    *   **规范 `cmd/` 的职责**：`cmd/server/main.go` 只做：命令行参数解析、加载配置、优雅退出信号监听。其余复杂的初始化逻辑全部内聚到 `internal/app/`。
+### 1. 项目布局（Layout）
 
-### 2. ⚙️ 配置重构：引入层次化合并与 12-Factor 标准
-*   **参照标准**：[The Twelve-Factor App - III. Config](https://12factor.net/config)
-*   **重构方案**：
-    *   **多层级叠加覆盖（Merge）**：引入 Viper 或自定义配置 Loader，加载顺序为：
-        $$\text{Default YAML} \longleftarrow \text{Local YAML (GitIgnored)} \longleftarrow \text{Environment Variables (OS)} \longleftarrow \text{Database Config}$$
-        本地只需在 `config.local.yaml` 写修改过的 API Key 即可，无需完整复制。
-    *   **绑定环境变量**：通过 `Viper.AutomaticEnv()` 或手写映射，自动将 OS 环境变量绑定到配置项，如：
-        ```bash
-        export XIAOZHI_LLM_DEEPSEEK_API_KEY="sk-xxxx"
-        ```
-        无缝支持容器化部署。
+* **合理性：7.5 / 10** -- 功能模块化清晰，核心领域划分明确，具备企业级项目的基本骨架。
+* **标准性：5.5 / 10** -- 存在顶级目录污染、Monorepo 缺乏协同、内部目录语义混杂等问题。
 
-### 3. 🧩 架构重构：六边形架构（Ports and Adapters）
-*   **参照标准**：**Hexagonal Architecture（端口与适配器模式）**
-*   **重构方案**：
-    *   **净化 Domain（领域层）**：`internal/domain/` 下只定义 **纯粹的 Interface（Ports/端口）** 和 **领域核心模型**。例如：
-        *   `internal/domain/llm/provider.go` 定义核心流式接口 `LLMProvider`，不得 import 任何 Eino 包。
-    *   **下放实现到 Infrastructure（适配器层）**：
-        *   新建 `internal/infrastructure/llm/eino/`，实现上述 `LLMProvider` 接口，在此处 import Eino 框架及编排。
-        *   新建 `internal/infrastructure/vad/webrtc/`，存放 WebRTC VAD 的实现。
-    *   **彻底斩断 CGo 物理绑定**：
-        *   主服务（纯 Go）取消 Tag 编译 CGo 依赖的代码。
-        *   强制将 ASR/声纹服务（`asr_server`）作为一个**独立进程**部署。
-        *   主服务通过 **gRPC / Local IPC Unix Socket / WebSocket** 与其交互。主服务获得 100% 纯 Go 极速编译分发体验，`asr_server` 独立在目标机器编译，完美解耦。
+**核心痛点：**
+
+1. **顶级目录污染**
+   `logger/`、`lib/`、`constants/` 被直接置于项目根目录。按 golang-standards 规范，根目录应只保留 `cmd/`、`internal/`、`config/`、`go.mod`、`Makefile` 等必要文件。
+
+2. **Monorepo 缺乏协同**
+   项目包含三个独立 Go Module（根目录主服务 `xiaozhi-esp32-server-golang`、`manager/backend` 模块 `xiaozhi/manager/backend`、Git 子模块 `asr_server` 模块 `voice_server`），但：
+   - **未配置 `go.work`**（Go 1.20+ 工作区），全靠 `replace` 指令串联：
+     - 主模块 `go.mod`：`replace xiaozhi/manager/backend => ./manager/backend`、`replace voice_server => ./asr_server`
+     - `manager/backend/go.mod`：`replace xiaozhi-esp32-server-golang => ../..`（双向 replace）
+   - IDE 无法自动跨 Module 跳转，本地联合调试需手动改 `replace` 路径。
+
+3. **内部目录语义混杂**
+   `internal/pkg/hooks/`（抽象插件总线）与 `internal/util/`（业务工具集）命名语义模糊，虽实际职责不重叠，但 `pkg` vs `util` 边界不清晰。`internal/util/` 是工具函数大杂烩（音频处理、加密、队列、句子切分、资源池混在一起），缺乏按主题分包。
+
+### 2. 配置规划（Configuration）
+
+* **合理性：6.5 / 10** -- 支持多配置 Provider 模式（memory / manager / redis），动态配置合并机制设计良好。
+* **标准性：5.0 / 10** -- 本地配置覆盖逻辑反直觉、配置格式碎片化、缺乏环境变量支持。
+
+**核心痛点：**
+
+1. **本地配置覆盖逻辑反直觉**
+   `config.local.yaml` 是对 `config.yaml` 的**完整替代**，而非**合并覆盖（Merge/Override）**。由 Makefile 决定二选一：
+   ```make
+   LOCAL_CONFIG ?= config/config.local.yaml
+   CONFIG       ?= $(if $(wildcard $(LOCAL_CONFIG)),$(LOCAL_CONFIG),config/config.yaml)
+   ```
+   - 默认配置新增项时，本地配置因缺项会报运行错误。
+   - 对比：远程配置（manager/redis）已使用 `viper.MergeConfigMap()` 做真正的合并，本地却做不到。
+
+2. **配置格式与源碎片化**
+   项目并存多种配置格式：
+   - `config/config.yaml`（主服务，viper + YAML）
+   - `config/mqtt_config.json`（MQTT 工具，viper + JSON）
+   - `asr_server/config.json`（ASR 服务，viper + JSON，支持 fsnotify 热重载）
+   - `manager/backend/config.json`（管理后台，非 viper，原生 JSON）
+   - `internal/config/config.go`（遗留 JSON Config，疑似未在主流程使用）
+
+3. **违背 12-Factor 环境变量原则**
+   项目不支持通过 OS 环境变量注入敏感信息（如 `DEEPSEEK_API_KEY`、`MYSQL_PASSWORD`）。对 Docker/K8s 容器化部署极不友好，也容易导致 API Key 被误提交（已在本次开发中触发 GitHub Push Protection 拦截）。
+
+### 3. 功能划分与分层（Functional Partitioning）
+
+* **合理性：7.0 / 10** -- Provider 抽象层设计良好，方便对接多家 ASR/TTS 服务。
+* **标准性：5.5 / 10** -- 框架实现泄露到领域层，CGo 强耦合导致编译笨重。
+
+**核心痛点：**
+
+1. **具体框架向 Domain 泄露**
+   `cloudwego/eino` 框架被广泛引入 `internal/domain/` 下多个子目录：
+
+   | 子目录 | 是否依赖 eino | 泄露程度 |
+   |--------|-------------|---------|
+   | `llm/`（base, common, eino_llm, coze_llm, dify_llm） | **是（重度）** | eino/schema + eino/components/model + eino-ext |
+   | `mcp/`（local_manager, global_manage, mcp_tool 等） | **是（重度）** | eino/components/tool + eino/schema |
+   | `memory/`（base, llm_memory, mem0, memobase, memos, nomemo） | **是** | eino/schema |
+   | `chat/hooks/`、`chat/streamtransform/` | **是** | eino/schema |
+   | `eventbus/` | **是** | eino/schema |
+   | `config/manager/` | **是** | eino/schema + eino/components/tool |
+   | `asr/`、`tts/`、`vad/`、`speaker/`、`audio/` | 否 | 纯原生协议 |
+
+   按 Clean Architecture，领域层应保持 100% 纯粹，不依赖任何第三方业务框架。Eino 是具体的 LLM 编排框架，属于**外层基础设施/适配器**（Infrastructure/Adapter）。
+
+2. **CGo 编译屏障严重**
+   CGo 集中在两处：
+   - **Opus 音频编解码**：`internal/util/opus_repacketizer.go`（`#cgo pkg-config: opus`），Makefile 强制 `CGO_ENABLED=1`
+   - **TEN-VAD 语音活动检测**：`internal/domain/vad/ten_vad/ten_vad_cgo.go`（`//go:build cgo`，链接 `lib/ten-vad/` 下的 `.so`/`.dll`/`.framework`）
+
+   主服务因 Opus 编解码必须开 CGo，导致整个主服务的交叉编译非常笨重，丧失了 Go 跨平台快速分发的优势。
+
+3. **双套日志体系不一致**
+   - 主服务 + manager backend：`logrus` + `nested-logrus-formatter` + `file-rotatelogs`
+   - `asr_server` 子模块：Go 1.21+ 标准库 `log/slog` + `lumberjack` 轮转
+   - 两套日志格式不统一，跨模块排查问题时需适配两种日志格式。
+   - 无 OpenTelemetry 分布式追踪。
 
 ---
 
-## 🗺️ 三、 重构后项目布局蓝图（Target Blueprint）
+## 二、重构方案
 
-重构后的系统文件布局应当调整为如下结构：
+### 1. 布局重构：遵循 golang-standards 规范
+
+**参照标准：** [golang-standards/project-layout](https://github.com/golang-standards/project-layout)
+
+**重构方案：**
+
+- **收拢顶级目录**：
+  - `logger/` -> `internal/pkg/logger/`
+  - `constants/` -> `internal/constants/`
+  - `lib/` -> `build/lib/`（平台相关的 `.so`/`.dll`/`.framework` 属于构建产物）
+
+- **启用 Go Workspaces**：
+  在根目录创建 `go.work`，统一管理三个独立 Go Module：
+  ```
+  go 1.24
+
+  use (
+      .
+      ./manager/backend
+      ./asr_server
+  )
+  ```
+  替代现有 3 处 `replace` 指令，IDE 自动跨 Module 跳转。
+
+- **规范 `cmd/` 的职责**：
+  `cmd/server/main.go` 只做：命令行参数解析、加载配置、优雅退出信号监听。复杂的初始化逻辑全部内聚到 `internal/app/`。
+
+- **拆分 `internal/util/`**：
+  按主题分包，消除工具函数大杂烩：
+  - `internal/pkg/audio/` -- 音频处理（opus、ogg、重打包）
+  - `internal/pkg/crypto/` -- 加密、密码签名
+  - `internal/pkg/queue/` -- 队列、资源池
+  - `internal/pkg/text/` -- 句子切分、文本处理
+
+### 2. 配置重构：层次化合并与 12-Factor 标准
+
+**参照标准：** [The Twelve-Factor App - III. Config](https://12factor.net/config)
+
+**重构方案：**
+
+- **多层级叠加覆盖（Merge）**：
+  利用 Viper 已有的 `MergeConfigMap` 能力，改为分层加载：
+  ```
+  config/config.yaml (默认，Git 跟踪)
+    ↑ 合并
+  config/config.local.yaml (本地差异，GitIgnored)
+    ↑ 合并
+  OS 环境变量 (DEEPSEEK_API_KEY 等)
+    ↑ 合并
+  数据库 / Redis 远程配置 (manager / redis provider)
+  ```
+  本地只需写差异项，无需完整复制。
+
+- **绑定环境变量**：
+  ```go
+  viper.SetEnvPrefix("XIAOZHI")
+  viper.AutomaticEnv()
+  viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+  ```
+  ```bash
+  export XIAOZHI_LLM_DEEPSEEK_API_KEY="sk-xxxx"
+  export XIAOZHI_REDIS_PASSWORD="xxx"
+  ```
+  无缝支持 Docker/K8s 部署，从根本上避免 API Key 被提交到代码库。
+
+- **统一配置格式**：
+  全部使用 YAML（包括 `asr_server` 和 `manager/backend`），消除 JSON/YAML 并存问题。
+
+- **清理遗留配置**：
+  移除 `internal/config/config.go`（遗留 JSON Config，未在主流程使用）。
+
+### 3. 架构重构：六边形架构（Ports and Adapters）
+
+**参照标准：** [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
+
+**重构方案：**
+
+- **净化 Domain（领域层）**：
+  `internal/domain/` 下只定义**纯粹的 Interface（Ports/端口）**和**领域核心模型**：
+  ```go
+  // internal/domain/llm/provider.go
+  type LLMProvider interface {
+      Chat(ctx context.Context, messages []*schema.Message, tools []*schema.ToolInfo) (<-chan *schema.Message, error)
+  }
+  ```
+  此文件不得 import 任何 `eino` 包。
+
+- **下放实现到 Infrastructure（适配器层）**：
+  | 当前位置 | 目标位置 | 说明 |
+  |---------|---------|------|
+  | `internal/domain/llm/eino_llm/` | `internal/infrastructure/llm/eino/` | Eino 框架实现 |
+  | `internal/domain/llm/coze_llm/` | `internal/infrastructure/llm/coze/` | Coze 实现 |
+  | `internal/domain/llm/dify_llm/` | `internal/infrastructure/llm/dify/` | Dify 实现 |
+  | `internal/domain/vad/ten_vad/` | `internal/infrastructure/vad/ten/` | TEN-VAD CGo 实现 |
+  | `internal/domain/vad/silero_vad/` | `internal/infrastructure/vad/silero/` | Silero 实现 |
+  | `internal/domain/mcp/` | `internal/infrastructure/mcp/eino/` | Eino MCP 实现 |
+
+- **渐进式迁移策略**：
+  不一次性重构，按模块逐步迁移。每次迁移一个 Provider，确保测试通过再继续。优先迁移 `llm/eino_llm/`（泄露最严重），再迁移 `mcp/`、`memory/`。
+
+### 4. CGo 解耦：进程间通信替代
+
+**当前状态：**
+- Opus 编解码必须 CGo -> 主服务无法纯 Go 编译
+- TEN-VAD 已用 `//go:build cgo` 隔离，但仍在主服务目录下
+
+**重构方案：**
+
+- **Opus 编解码**：替换为纯 Go 实现 `github.com/hraban/opus` 已在用，但 `opus_repacketizer.go` 仍直接 `#cgo`。改为通过 `hraban/opus` 库间接调用，或用纯 Go 的 [opus-go](https://github.com/hraban/opus) 重打包接口封装，隔离 CGo 到单一文件。
+
+- **TEN-VAD**：已通过 `//go:build cgo` 隔离。进一步将 CGo 代码移到 `asr_server` 子模块，主服务通过 gRPC/Unix Socket 调用，实现 100% 纯 Go 编译。
+
+- **asr_server 独立部署**：主服务通过 gRPC / Local IPC Unix Socket / WebSocket 与 `asr_server` 交互，主服务获得纯 Go 极速编译体验。
+
+### 5. 日志与可观测性统一
+
+**重构方案：**
+
+- **统一日志框架**：全项目迁移到 Go 1.21+ 标准库 `log/slog`（`asr_server` 已在用），替换主服务的 logrus。
+- **结构化日志格式**：统一 JSON Handler，便于 ELK/Loki 采集。
+- **引入 OpenTelemetry**：添加分布式追踪，关键链路（hello -> ASR -> LLM -> TTS）加 span，便于延迟分析。
+
+---
+
+## 三、重构后项目布局蓝图
 
 ```
 xiaozhi-esp32-server-golang/
 ├── go.work                         # Go Workspaces（多 Module 联合调试）
-├── go.mod                          # 主服务 Module
+├── go.mod                          # 主服务 Module (xiaozhi-esp32-server-golang)
+├── go.sum
 ├── Makefile
 ├── README.md
+├── .golangci.yml                   # 代码质量检查配置
 │
-├── cmd/                            # 唯一的执行入口
-│   └── xiaozhi-server/
-│       └── main.go                 # 命令行解析、配置加载、实例化并启动 App
+├── cmd/                            # 执行入口
+│   ├── server/                     # 主服务入口
+│   │   └── main.go                 # 仅做：参数解析、配置加载、信号监听
+│   ├── mqtt/                       # MQTT 工具入口
+│   └── mock_ai_server/             # Mock AI 服务入口
 │
-├── config/                         # 纯静态、默认公用配置文件
-│   └── default.yaml
+├── config/                         # 默认配置文件
+│   └── config.yaml                 # Git 跟踪，不含敏感信息
 │
-├── data/                           # 本地持久化与运行时临时数据
-│   ├── storage/                    # 存储声纹向量、SQLite 数据库等
-│   └── uploads/                    # 存储声音复刻音频
+├── data/                           # 本地持久化（GitIgnored）
+│   ├── sqlite/                     # SQLite 数据库
+│   ├── storage/                    # 声纹向量、上传文件
+│   └── logs/                       # 日志文件
 │
-├── internal/                       # 主服务核心（受 internal 保护，防止外部非法引用）
-│   ├── app/
-│   │   └── server/                 # 核心服务器初始化逻辑（服务、端口启动等）
+├── internal/                       # 主服务核心（受 internal 保护）
+│   ├── app/                        # 应用初始化
+│   │   └── server/                 # 服务启动、端口绑定、优雅退出
 │   │
-│   ├── domain/                     # 【领域层】无外部框架依赖，定义协议、实体与端口
-│   │   ├── session/                # 会话流转状态机、信令
-│   │   ├── asr/                    # type ASR interface
-│   │   ├── llm/                    # type LLM interface
-│   │   ├── tts/                    # type TTS interface
-│   │   └── vad/                    # type VAD interface
+│   ├── domain/                     # 【领域层】无外部框架依赖
+│   │   ├── session/                # 会话状态机、信令协议
+│   │   ├── asr/                    # type AsrProvider interface
+│   │   ├── llm/                    # type LLMProvider interface
+│   │   ├── tts/                    # type TtsProvider interface
+│   │   ├── vad/                    # type VadProvider interface
+│   │   ├── chat/                   # 会话编排（纯领域逻辑）
+│   │   └── message/                # 消息模型定义
 │   │
-│   ├── infrastructure/             # 【基础设施/适配器层】具体框架与第三方服务的技术实现
+│   ├── infrastructure/             # 【适配器层】具体框架实现
 │   │   ├── llm/
-│   │   │   ├── eino/               # 封装 Eino 框架的 LLM 具体实现
-│   │   │   └── mock/               # Mock 本地测试 LLM 实现
+│   │   │   ├── eino/               # Eino 框架 LLM 实现
+│   │   │   ├── coze/               # Coze LLM 实现
+│   │   │   └── dify/               # Dify LLM 实现
+│   │   ├── asr/
+│   │   │   ├── doubao/             # 豆包 ASR
+│   │   │   ├── funasr/             # FunASR
+│   │   │   ├── aliyun/             # 阿里云 ASR
+│   │   │   └── xunfei/             # 讯飞 ASR
+│   │   ├── tts/
+│   │   │   ├── edge/                # Edge TTS（免费）
+│   │   │   ├── doubao/             # 豆包 TTS
+│   │   │   ├── cosyvoice/          # CosyVoice
+│   │   │   └── xunfei/             # 讯飞 TTS
 │   │   ├── vad/
-│   │   │   ├── silero/             # Silero VAD 模型加载实现
-│   │   │   └── webrtc/             # 纯 Go WebRTC VAD 实现
-│   │   └── db/                     # GORM / SQLite 具体存储适配
+│   │   │   ├── ten/                # TEN-VAD (CGo)
+│   │   │   ├── silero/             # Silero VAD
+│   │   │   └── webrtc/             # WebRTC VAD
+│   │   ├── mcp/
+│   │   │   └── eino/               # Eino MCP 工具管理
+│   │   ├── memory/
+│   │   │   ├── redis/              # Redis 短期记忆
+│   │   │   ├── memobase/           # Memobase 长期记忆
+│   │   │   └── mem0/               # Mem0 长期记忆
+│   │   └── db/                     # GORM / SQLite 存储适配
 │   │
-│   └── pkg/                        # 通用、非业务公共库（全项目共享）
-│       ├── logger/                 # 结构化日志组件
-│       ├── pool/                   # 并发连接池/资源池
-│       └── config_loader/          # 层次化配置加载器（支持 OS 环境变量合并）
+│   ├── pkg/                        # 通用公共库（全项目共享）
+│   │   ├── logger/                 # slog 结构化日志
+│   │   ├── config/                 # 层次化配置加载器
+│   │   ├── audio/                  # 音频处理（opus、ogg）
+│   │   ├── crypto/                 # 加密、签名
+│   │   ├── queue/                  # 队列、资源池
+│   │   ├── text/                   # 句子切分、文本处理
+│   │   └── hooks/                  # 插件/Hook 总线
+│   │
+│   └── constants/                  # 常量定义
 │
-├── manager/                        # 管理后台服务（子 Module）
-│   ├── backend/                    # Go API 核心服务
-│   └── frontend/                   # Vue 3 静态前端
+├── manager/                        # 管理后台（子 Module）
+│   ├── backend/                    # Go API
+│   └── frontend/                   # Vue 3 前端
 │
-├── asr_server/                     # CGo 独立 ASR/声纹微服务（子 Module，进程间 RPC 解耦）
+├── asr_server/                     # ASR/声纹微服务（子 Module，独立进程）
 │   └── main.go
 │
-└── test/                           # 自动化集成测试与高吞吐压力测试工具
+├── build/                          # 构建产物
+│   ├── lib/                        # 平台相关库（.so/.dll/.framework）
+│   ├── common/                     # 打包用公共配置
+│   └── models/                     # VAD/声纹 onnx 模型
+│
+├── docker/                         # Dockerfile
+├── doc/                            # 文档
+├── ai_doc/                         # 架构设计文档
+└── test/                           # 集成测试与压测工具
 ```
 
 ---
 
-## 四、 🌟 改造收益
+## 四、改造收益
 
-1.  **闪电般的交叉编译**：主服务解开 CGo 绑定，成为 100% 纯 Go 代码。编译、多平台分发、CI/CD 构建耗时将由分钟级下降至秒级。
-2.  **优雅、流畅的开发体验**：启用 `go.work` 后，IDE 能够完美感知跨 Module 跳转，不需要再通过手动替换 `replace` 依赖路径来联调。
-3.  **零安全配置隐患**：彻底隔离敏感 Token。在生产环境部署时直接以 Docker 环境变量的形式（12-Factor）安全注入，规避本地 `.yaml` 提交代码库泄露敏感信息的风险。
-4.  **清晰可测的代码逻辑**：领域层只关注纯业务逻辑，不关注用的是 Eino 还是原生 SDK，单元测试（Unit Testing）编写耗时缩短 50% 以上。
+| 维度 | 当前状态 | 重构后 |
+|------|---------|--------|
+| **编译速度** | 主服务强制 CGo，交叉编译笨重 | 主服务 100% 纯 Go，秒级编译 |
+| **跨 Module 调试** | 3 处 replace，IDE 跳转断裂 | go.work 统一管理，无缝跳转 |
+| **配置管理** | 本地配置完整替代，容易缺项 | 层次化合并，本地只写差异 |
+| **敏感信息安全** | API Key 写在 YAML，易误提交 | 环境变量注入，Push Protection 不再拦截 |
+| **领域层纯净度** | eino 框架泄露到 6 个 domain 子目录 | 领域层零框架依赖，纯接口定义 |
+| **单元测试** | 领域层耦合框架，Mock 困难 | 领域层纯接口，Mock 简单 |
+| **日志一致性** | logrus + slog 双套并行 | 统一 slog + JSON 格式 |
+| **可观测性** | 无分布式追踪 | OpenTelemetry 全链路追踪 |
+
+---
+
+## 五、迁移路线图
+
+采用**渐进式迁移**，不中断现有功能：
+
+```
+阶段 1：基础设施 (低风险)
+  ├── 创建 go.work，替代 replace 指令
+  ├── 收拢顶级目录 (logger/, constants/, lib/)
+  └── 统一日志到 slog
+
+阶段 2：配置体系 (中风险)
+  ├── 改 config.local.yaml 为合并模式
+  ├── 添加环境变量绑定 (AutomaticEnv)
+  └── 清理遗留配置代码
+
+阶段 3：领域层净化 (高风险，逐模块迁移)
+  ├── 迁移 llm/eino_llm/ -> infrastructure/llm/eino/
+  ├── 迁移 mcp/ -> infrastructure/mcp/eino/
+  ├── 迁移 memory/ -> infrastructure/memory/
+  └── 每次迁移一个 Provider，确保测试通过
+
+阶段 4：CGo 解耦 (高风险)
+  ├── 隔离 Opus CGo 到单一文件
+  ├── TEN-VAD 移到 asr_server
+  └── 主服务通过 IPC 调用
+
+阶段 5：可观测性 (增量)
+  ├── 引入 OpenTelemetry
+  ├── 关键链路加 span
+  └── 统一结构化日志格式
+```
+
+---
+
+## 参考标准
+
+| 标准 | 来源 |
+|------|------|
+| Go 项目布局 | [golang-standards/project-layout](https://github.com/golang-standards/project-layout) |
+| 12-Factor App | [12factor.net](https://12factor.net/) |
+| 六边形架构 | [Alistair Cockburn - Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/) |
+| Clean Architecture | [Robert C. Martin - Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) |
+| Go Workspaces | [Go 1.20 Release Notes](https://go.dev/doc/go-workspace) |
+| Effective Go | [go.dev/doc/effective_go](https://go.dev/doc/effective_go) |
