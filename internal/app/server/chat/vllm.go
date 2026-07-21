@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 func HandleVllm(deviceId string, file []byte, text string) (string, error) {

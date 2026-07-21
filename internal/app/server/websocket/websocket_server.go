@@ -14,7 +14,7 @@ import (
 	"xiaozhi-esp32-server-golang/internal/app/server/types"
 	"xiaozhi-esp32-server-golang/internal/domain/mcp"
 	"xiaozhi-esp32-server-golang/internal/domain/openclaw"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // WebSocketServer 表示 WebSocket 服务器

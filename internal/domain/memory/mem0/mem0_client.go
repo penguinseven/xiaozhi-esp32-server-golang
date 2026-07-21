@@ -10,7 +10,7 @@ import (
 	"github.com/hackers365/mem0-go/client"
 	"github.com/hackers365/mem0-go/types"
 
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // Mem0Client 实现 MemoryProvider 和 EnhancedMemoryProvider 接口

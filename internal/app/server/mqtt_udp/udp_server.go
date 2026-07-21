@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	. "xiaozhi-esp32-server-golang/logger"
+	. "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // UDPServer UDP服务器结构

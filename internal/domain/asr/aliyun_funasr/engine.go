@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"xiaozhi-esp32-server-golang/constants"
+	"xiaozhi-esp32-server-golang/internal/constants"
 	"xiaozhi-esp32-server-golang/internal/domain/asr/types"
 
 	"github.com/google/uuid"

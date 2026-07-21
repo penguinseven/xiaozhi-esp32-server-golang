@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // ClientEvent 客户端发送事件基础结构

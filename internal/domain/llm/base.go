@@ -7,7 +7,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 
-	"xiaozhi-esp32-server-golang/constants"
+	"xiaozhi-esp32-server-golang/internal/constants"
 	"xiaozhi-esp32-server-golang/internal/domain/llm/coze_llm"
 	"xiaozhi-esp32-server-golang/internal/domain/llm/dify_llm"
 	"xiaozhi-esp32-server-golang/internal/domain/llm/eino_llm"

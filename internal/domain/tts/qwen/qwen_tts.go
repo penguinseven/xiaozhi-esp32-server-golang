@@ -16,7 +16,7 @@ import (
 
 	"xiaozhi-esp32-server-golang/internal/data/audio"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/gopxl/beep"
 	sse "github.com/tmaxmax/go-sse"

@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	config_types "xiaozhi-esp32-server-golang/internal/domain/config/types"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 type weknoraSearcher struct{}

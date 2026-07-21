@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"xiaozhi-esp32-server-golang/constants"
+	"xiaozhi-esp32-server-golang/internal/constants"
 	"xiaozhi-esp32-server-golang/internal/app/server/auth"
 	"xiaozhi-esp32-server-golang/internal/app/server/chat/plugins"
 	types_conn "xiaozhi-esp32-server-golang/internal/app/server/types"
@@ -27,7 +27,7 @@ import (
 	"xiaozhi-esp32-server-golang/internal/domain/mcp"
 	"xiaozhi-esp32-server-golang/internal/domain/openclaw"
 	pkghooks "xiaozhi-esp32-server-golang/internal/pkg/hooks"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 type ChatManager struct {

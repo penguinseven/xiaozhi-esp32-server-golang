@@ -6,7 +6,7 @@ import (
 
 	. "xiaozhi-esp32-server-golang/internal/data/client"
 	"xiaozhi-esp32-server-golang/internal/domain/mcp"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/spf13/viper"

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"xiaozhi-esp32-server-golang/internal/domain/mcp"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/golang-jwt/jwt/v4"
 )

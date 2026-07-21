@@ -8,6 +8,10 @@ cmd/mqtt/mqtt
 cmd/mock_ai_server/mock_ai_server
 cmd/opus_example/opus_example
 
+# 构建目录（保留 build/common/ 配置模板）
+build/*
+!build/common/
+
 # 日志
 *.log
 /tmp/logs/
@@ -15,8 +19,14 @@ cmd/opus_example/opus_example
 # 运行时数据
 tmp/
 data/
+**/data/                   # 递归匹配所有子目录下的 data/
 uploads/
 downloads/
+
+# 数据库备份
+*.db.bak*
+*.db.reset*
+*.db.backup
 
 # 配置文件（含敏感信息）
 *.pem
@@ -37,11 +47,14 @@ config_shijingbo.yaml
 .DS_Store
 Thumbs.db
 
-# macOS binary libraries (platform-specific build artifacts)
-# Large binary files; download manually. See AGENTS.md for details.
+# macOS binary libraries
 *.dylib
 
 # 依赖目录
 dist/
 node_modules/
 vendor/
+
+# Go workspaces（个人环境配置）
+go.work.sum
+# go.work          # 根据团队约定决定是否提交

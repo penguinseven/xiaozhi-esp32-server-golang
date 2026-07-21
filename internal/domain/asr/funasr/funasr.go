@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"xiaozhi-esp32-server-golang/constants"
-	log "xiaozhi-esp32-server-golang/logger"
+	"xiaozhi-esp32-server-golang/internal/constants"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/gorilla/websocket"
 

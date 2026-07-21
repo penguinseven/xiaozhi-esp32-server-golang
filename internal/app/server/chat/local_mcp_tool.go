@@ -10,7 +10,7 @@ import (
 	"time"
 
 	mcp_manager "xiaozhi-esp32-server-golang/internal/domain/mcp"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	//"github.com/scroot/music-sd/pkg/netease"
 	//"github.com/scroot/music-sd/pkg/qq"

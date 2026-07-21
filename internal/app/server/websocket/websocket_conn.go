@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 	"xiaozhi-esp32-server-golang/internal/app/server/types"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/gorilla/websocket"
 )

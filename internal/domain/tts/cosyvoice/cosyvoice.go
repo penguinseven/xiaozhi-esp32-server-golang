@@ -13,7 +13,7 @@ import (
 
 	"xiaozhi-esp32-server-golang/internal/data/audio"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // 全局HTTP客户端，实现连接池

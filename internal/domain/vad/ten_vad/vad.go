@@ -6,7 +6,7 @@ import (
 	"sync"
 	"unsafe"
 
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	. "xiaozhi-esp32-server-golang/internal/domain/vad/inter"
 )

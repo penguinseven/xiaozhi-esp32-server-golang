@@ -14,7 +14,7 @@ import (
 	"time"
 
 	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/cloudwego/eino/schema"
 	sse "github.com/tmaxmax/go-sse"

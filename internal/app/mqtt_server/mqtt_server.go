@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/viper"
 
 	msg "xiaozhi-esp32-server-golang/internal/data/msg"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 var (

@@ -6,7 +6,7 @@ import (
 	"time"
 	"xiaozhi-esp32-server-golang/internal/components/http"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/spf13/viper"
 )

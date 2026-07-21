@@ -14,8 +14,8 @@ import (
 	"xiaozhi-esp32-server-golang/internal/data/client"
 	. "xiaozhi-esp32-server-golang/internal/data/client"
 	msgdata "xiaozhi-esp32-server-golang/internal/data/msg"
-	. "xiaozhi-esp32-server-golang/logger"
-	log "xiaozhi-esp32-server-golang/logger"
+	. "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 type MqttConfig struct {

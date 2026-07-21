@@ -14,7 +14,7 @@ import (
 
 	"xiaozhi-esp32-server-golang/internal/domain/doubaoapi"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/gorilla/websocket"
 )

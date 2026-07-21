@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"xiaozhi-esp32-server-golang/constants"
+	"xiaozhi-esp32-server-golang/internal/constants"
 	"xiaozhi-esp32-server-golang/internal/domain/asr/types"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/gorilla/websocket"
 )

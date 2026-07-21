@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	. "xiaozhi-esp32-server-golang/internal/domain/vad/inter"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/hackers365/silero-vad-go/speech"
 )

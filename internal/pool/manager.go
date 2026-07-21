@@ -13,7 +13,7 @@ import (
 	"xiaozhi-esp32-server-golang/internal/domain/vad"
 	vad_inter "xiaozhi-esp32-server-golang/internal/domain/vad/inter"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/spf13/viper"

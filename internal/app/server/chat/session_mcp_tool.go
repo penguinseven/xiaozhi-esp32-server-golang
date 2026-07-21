@@ -16,7 +16,7 @@ import (
 	config_types "xiaozhi-esp32-server-golang/internal/domain/config/types"
 	llm_memory "xiaozhi-esp32-server-golang/internal/domain/memory/llm_memory"
 	"xiaozhi-esp32-server-golang/internal/domain/rag"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/spf13/viper"
 )

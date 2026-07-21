@@ -6,7 +6,7 @@ import (
 	"xiaozhi-esp32-server-golang/internal/data/audio"
 	"xiaozhi-esp32-server-golang/internal/domain/asr/funasr"
 	"xiaozhi-esp32-server-golang/internal/domain/asr/types"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // FunasrAdapter 适配 funasr 包到 asr 接口

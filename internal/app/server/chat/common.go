@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 const stopSpeakingInterruptTimeout = 2 * time.Second

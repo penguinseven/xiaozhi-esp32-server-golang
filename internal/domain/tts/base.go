@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"xiaozhi-esp32-server-golang/constants"
+	"xiaozhi-esp32-server-golang/internal/constants"
 	"xiaozhi-esp32-server-golang/internal/domain/tts/cosyvoice"
 	"xiaozhi-esp32-server-golang/internal/domain/tts/doubao"
 	"xiaozhi-esp32-server-golang/internal/domain/tts/edge"

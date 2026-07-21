@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	i_redis "xiaozhi-esp32-server-golang/internal/db/redis"
 	"xiaozhi-esp32-server-golang/internal/domain/config/types"

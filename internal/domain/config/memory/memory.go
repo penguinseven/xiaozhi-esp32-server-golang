@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"xiaozhi-esp32-server-golang/internal/domain/config/types"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/spf13/viper"
 )

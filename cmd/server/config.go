@@ -13,7 +13,7 @@ import (
 	redisdb "xiaozhi-esp32-server-golang/internal/db/redis"
 	user_config "xiaozhi-esp32-server-golang/internal/domain/config"
 
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/mitchellh/hashstructure/v2"

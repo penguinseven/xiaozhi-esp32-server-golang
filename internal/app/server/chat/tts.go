@@ -14,7 +14,7 @@ import (
 	ttsstream "xiaozhi-esp32-server-golang/internal/domain/tts/streaming"
 	"xiaozhi-esp32-server-golang/internal/pool"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // 会话级全局音频队列元素类型常量

@@ -3,7 +3,7 @@ package user_config
 import (
 	"context"
 	"fmt"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"xiaozhi-esp32-server-golang/internal/domain/config/manager"
 	"xiaozhi-esp32-server-golang/internal/domain/config/memory"

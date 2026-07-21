@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/viper"
 
 	mqtt_server "xiaozhi-esp32-server-golang/internal/app/mqtt_server"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // 初始化函数

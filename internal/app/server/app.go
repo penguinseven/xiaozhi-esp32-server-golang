@@ -19,7 +19,7 @@ import (
 	"xiaozhi-esp32-server-golang/internal/domain/openclaw"
 	"xiaozhi-esp32-server-golang/internal/pool"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/spf13/viper"

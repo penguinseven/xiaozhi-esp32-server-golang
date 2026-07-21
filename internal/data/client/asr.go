@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 	asr_types "xiaozhi-esp32-server-golang/internal/domain/asr/types"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 type Asr struct {

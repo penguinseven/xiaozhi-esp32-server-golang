@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 	mbconfig "xiaozhi/manager/backend/config"
 	"xiaozhi/manager/backend/database"
 	"xiaozhi/manager/backend/router"

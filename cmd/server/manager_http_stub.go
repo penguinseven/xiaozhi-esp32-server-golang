@@ -2,7 +2,7 @@
 
 package main
 
-import log "xiaozhi-esp32-server-golang/logger"
+import log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 // StartManagerHTTP 未启用 manager 编译时的空实现。需使用 -tags manager 编译以启用内嵌 manager HTTP。
 func StartManagerHTTP(configPath string) {

@@ -6,7 +6,7 @@ import (
 	"sync"
 	. "xiaozhi-esp32-server-golang/internal/data/client"
 	"xiaozhi-esp32-server-golang/internal/domain/eventbus"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // EventWrapper 事件包装器，用于统一处理不同类型的事件

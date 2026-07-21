@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"voice_server/server"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 const (

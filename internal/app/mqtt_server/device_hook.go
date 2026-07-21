@@ -9,7 +9,7 @@ import (
 	"github.com/mochi-mqtt/server/v2/packets"
 
 	client "xiaozhi-esp32-server-golang/internal/data/msg"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // DeviceHook 设备权限与自动订阅钩子

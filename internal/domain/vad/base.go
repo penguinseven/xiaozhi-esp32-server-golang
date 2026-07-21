@@ -2,7 +2,7 @@ package vad
 
 import (
 	"errors"
-	"xiaozhi-esp32-server-golang/constants"
+	"xiaozhi-esp32-server-golang/internal/constants"
 	"xiaozhi-esp32-server-golang/internal/domain/vad/inter"
 	"xiaozhi-esp32-server-golang/internal/domain/vad/silero_vad"
 	"xiaozhi-esp32-server-golang/internal/domain/vad/ten_vad"

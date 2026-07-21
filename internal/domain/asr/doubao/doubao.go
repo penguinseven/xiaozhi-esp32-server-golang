@@ -10,7 +10,7 @@ import (
 	"xiaozhi-esp32-server-golang/internal/domain/asr/doubao/request"
 	"xiaozhi-esp32-server-golang/internal/domain/asr/doubao/response"
 	"xiaozhi-esp32-server-golang/internal/domain/asr/types"
-	log "xiaozhi-esp32-server-golang/logger"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 func shortDebugID(id string) string {
