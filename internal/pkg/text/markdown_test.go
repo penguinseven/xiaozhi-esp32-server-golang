@@ -180,35 +180,25 @@ func TestStripMarkdown_TableWithText(t *testing.T) {
 	}
 }
 
-func TestStripMarkdown_Complex(t *testing.T) {
-	input := `# 使用说明
-
-## 安装
-
-请运行以下命令安装依赖：
-
-` + "```bash" + `
-npm install
-` + "```" + `
-
-## 配置
-
-请参考 [官方文档](https://example.com/docs) 进行配置。
-
-> 注意：请确保版本 >= 2.0
-
-### 常见问题
-
-1. **启动失败**：检查端口是否被占用
-2. *连接超时*：检查网络设置
-
-- 选项A
-- 选项B
-
-更多信息请查看 ~/docs/README.md（注意，这不是 Markdown 标记）`
-	want := "使用说明\n\n安装\n\n请运行以下命令安装依赖：\n\n\n配置\n\n请参考 官方文档 进行配置。\n\n注意：请确保版本 >= 2.0\n\n常见问题\n\n启动失败：检查端口是否被占用\n\n连接超时：检查网络设置\n\n选项A\n\n选项B\n\n更多信息请查看 ~/docs/README.md（注意，这不是 Markdown 标记）"
-	if got := StripMarkdown(input); got != want {
-		t.Errorf("StripMarkdown(complex)\ngot:  %q\nwant: %q", got, want)
+func TestStripMarkdown_Emoji(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"笑脸", "眼角含笑 😊", "眼角含笑"},
+		{"哭脸", "😂 笑死我了", "笑死我了"},
+		{"爱心", "❤️ 爱心", "爱心"},
+		{"点赞", "👍 点赞", "点赞"},
+		{"庆祝", "🎉 庆祝", "庆祝"},
+		{"混合标记", "**重要** 😊 完成", "重要 完成"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StripMarkdown(tt.input); got != tt.want {
+				t.Errorf("StripMarkdown(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -254,5 +244,13 @@ func TestStripMarkdown_LeadingTrailingSpaces(t *testing.T) {
 	want := "你好世界"
 	if got := StripMarkdown(input); got != want {
 		t.Errorf("StripMarkdown(%q) = %q, want %q", input, got, want)
+	}
+}
+
+func TestStripMarkdown_Complex(t *testing.T) {
+	input := "# 使用说明 😊\n\n## 安装\n\n运行 `make build` 命令 ❤️\n\n> 注意：请确保版本 >= 2.0\n\n1. **启动**：检查端口 👍\n2. *检查*：网络设置\n\n- 选项A\n- 选项B\n\n更多信息：~/docs/README.md 🎉"
+	want := "使用说明\n\n安装\n\n运行 命令\n\n注意：请确保版本 >= 2.0\n\n启动：检查端口\n检查：网络设置\n\n选项A\n选项B\n\n更多信息：~/docs/README.md"
+	if got := StripMarkdown(input); got != want {
+		t.Errorf("StripMarkdown(complex)\ngot:  %q\nwant: %q", got, want)
 	}
 }

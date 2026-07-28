@@ -188,3 +188,24 @@ func TestOutputSegmenterAggregatesToolCallsUntilBoundary(t *testing.T) {
 		t.Fatalf("out.Items[1].Text = %q, want %q", got, "继续回复。")
 	}
 }
+
+func TestOutputSegmenterStripsMarkdown(t *testing.T) {
+	transformer, err := outputSegmenterFactory{}.New(streamtransform.Context{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	out, err := transformer.Transform(streamtransform.Item{
+		Kind: streamtransform.ItemKindTextDelta,
+		Text: "这是一段**加粗**和*斜体*文本。",
+	})
+	if err != nil {
+		t.Fatalf("Transform() error = %v", err)
+	}
+	if len(out.Items) != 1 {
+		t.Fatalf("len(out.Items) = %d, want 1", len(out.Items))
+	}
+	if got := out.Items[0].Text; got != "这是一段加粗和斜体文本。" {
+		t.Fatalf("out.Items[0].Text = %q, want %q", got, "这是一段加粗和斜体文本。")
+	}
+}

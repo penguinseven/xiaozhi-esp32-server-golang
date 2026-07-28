@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"xiaozhi-esp32-server-golang/internal/domain/chat/streamtransform"
+	"xiaozhi-esp32-server-golang/internal/pkg/text"
 	"xiaozhi-esp32-server-golang/internal/util"
 )
 
@@ -74,6 +75,10 @@ func (t *outputSegmenterTransformer) transformText(item streamtransform.Item) st
 			if strings.TrimSpace(sentence) == "" {
 				continue
 			}
+			sentence = strings.TrimSpace(text.StripMarkdown(sentence))
+			if sentence == "" {
+				continue
+			}
 			out = append(out, streamtransform.Item{
 				Kind: streamtransform.ItemKindTextSegment,
 				Text: sentence,
@@ -132,6 +137,10 @@ func (t *outputSegmenterTransformer) flushPendingText(meta map[string]any, force
 
 	t.textBuffer.Reset()
 	t.isFirst = false
+	buffered = strings.TrimSpace(text.StripMarkdown(buffered))
+	if buffered == "" {
+		return nil
+	}
 	return []streamtransform.Item{{
 		Kind:  streamtransform.ItemKindTextSegment,
 		Text:  buffered,
