@@ -981,14 +981,24 @@ func (a *ASRManager) StartAsrRecognitionLoop(
 					emptyResultWindowStart = now
 					emptyResultCount = 0
 				}
-				emptyResultCount++
-				if emptyResultCount >= maxEmptyResultInWindow {
-					err := fmt.Errorf("ASR短时间内连续返回空结果(%d次/%s)，触发保护并断开连接", emptyResultCount, emptyResultProtectWindow)
-					log.Errorf("%v", err)
-					if onError != nil {
-						onError(err)
+
+				// 仅在单次 ASR 轮次耗时极短（如小于500ms）时才计入空结果计数，防止 ASR 故障导致的 CPU 忙轮询死循环；
+				// 正常的 VAD 触发+静音检测流程耗时通常大于500ms，不应触发断连保护。
+				turnDuration := now.UnixMilli() - state.Statistic.TurnStartTs
+				if turnDuration < 500 {
+					emptyResultCount++
+					if emptyResultCount >= maxEmptyResultInWindow {
+						err := fmt.Errorf("ASR短时间内连续返回空结果(%d次/%s)，触发保护并断开连接", emptyResultCount, emptyResultProtectWindow)
+						log.Errorf("%v", err)
+						if onError != nil {
+							onError(err)
+						}
+						return
 					}
-					return
+				} else {
+					// 耗时正常，说明是正常的无声识别，重置保护计数
+					emptyResultCount = 0
+					emptyResultWindowStart = now
 				}
 
 				// text 为空的情况
@@ -1065,6 +1075,12 @@ func trimFirstSpeechAudio(allData []float32, currentFrameSamples, sampleRate, ch
 // getSpeakerResult 获取暂存的声纹结果（带超时）
 func (a *ASRManager) getSpeakerResult() *speaker.IdentifyResult {
 	if a.session == nil || a.session.speakerManager == nil {
+		return nil
+	}
+
+	// 本轮声纹流式识别未激活（整轮无语音/启动失败/上一轮已 finish），
+	// 异步回调不会发送就绪信号，直接返回避免无谓的 200ms 等待。
+	if !a.session.speakerManager.IsActive() {
 		return nil
 	}
 

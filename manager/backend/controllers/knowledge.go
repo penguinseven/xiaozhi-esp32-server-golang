@@ -1,14 +1,17 @@
 package controllers
 
 import (
+	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -24,6 +27,8 @@ import (
 const knowledgeDocumentUploadMaxBytes = 2 * 1024 * 1024
 
 const knowledgeUploadContentPrefix = "__KB_FILE_UPLOAD_V1__:"
+const knowledgeUploadFilePathPrefix = "__KB_FILE_PATH_V1__:"
+const knowledgeUploadDir = "./storage/knowledge"
 
 var allowedKnowledgeRagflowFileExt = map[string]struct{}{
 	".txt":      {},
@@ -724,6 +729,9 @@ func (uc *UserController) DeleteKnowledgeBase(c *gin.Context) {
 		return
 	}
 	for _, doc := range docs {
+		tryDeleteLocalFileOfDocument(doc.Content)
+	}
+	for _, doc := range docs {
 		if err := enqueueKnowledgeDocumentSyncDelete(uc.DB, item, doc); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"message":    "删除成功",
@@ -1034,6 +1042,20 @@ func (uc *UserController) CreateKnowledgeBaseDocument(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"data": doc, "message": "文档已保存，后台正在同步"})
 }
 
+func randomString(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		num, err := crand.Int(crand.Reader, big.NewInt(int64(len(letters))))
+		if err != nil {
+			b[i] = letters[0]
+		} else {
+			b[i] = letters[num.Int64()]
+		}
+	}
+	return string(b)
+}
+
 func (uc *UserController) CreateKnowledgeBaseDocumentByUpload(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	kbID, _ := strconv.Atoi(c.Param("id"))
@@ -1067,15 +1089,35 @@ func (uc *UserController) CreateKnowledgeBaseDocumentByUpload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	content, err := encodeKnowledgeUploadContent(uploadFileName, fileData)
+
+	// Ensure storage directory exists
+	if err := os.MkdirAll(knowledgeUploadDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建上传存储目录失败: " + err.Error()})
+		return
+	}
+
+	// Generate a unique filename: timestamp + 8 random chars + sanitized original filename
+	sanitizedName := sanitizeKnowledgeUploadFileName(uploadFileName)
+	uniqueFileName := fmt.Sprintf("%d_%s_%s", time.Now().UnixNano(), randomString(8), sanitizedName)
+	filePath := filepath.Join(knowledgeUploadDir, uniqueFileName)
+
+	// Write file data to local storage
+	if err := os.WriteFile(filePath, fileData, 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存上传文件到本地失败: " + err.Error()})
+		return
+	}
+
+	content, err := encodeKnowledgeUploadFilePath(uploadFileName, filePath)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "编码上传文件失败"})
+		_ = os.Remove(filePath)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "编码上传文件路径失败"})
 		return
 	}
 
 	docName := buildKnowledgeUploadDocumentName(c.PostForm("name"), fileHeader.Filename)
 	doc, enqueueErr, err := uc.createKnowledgeBaseDocumentRecord(kb.ID, docName, content)
 	if err != nil {
+		_ = os.Remove(filePath)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "上传文件创建文档失败"})
 		return
 	}
@@ -1148,6 +1190,7 @@ func (uc *UserController) UpdateKnowledgeBaseDocument(c *gin.Context) {
 		return
 	}
 
+	oldContent := doc.Content
 	doc.Name = strings.TrimSpace(req.Name)
 	doc.Content = req.Content
 	doc.SyncStatus = knowledgeSyncStatusPending
@@ -1155,6 +1198,9 @@ func (uc *UserController) UpdateKnowledgeBaseDocument(c *gin.Context) {
 	if err := uc.DB.Save(&doc).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新文档失败"})
 		return
+	}
+	if oldContent != doc.Content {
+		tryDeleteLocalFileOfDocument(oldContent)
 	}
 
 	if err := enqueueKnowledgeDocumentSyncUpsert(uc.DB, kb.ID, doc.ID); err != nil {
@@ -1197,6 +1243,7 @@ func (uc *UserController) DeleteKnowledgeBaseDocument(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除文档失败"})
 		return
 	}
+	tryDeleteLocalFileOfDocument(doc.Content)
 	if err := enqueueKnowledgeDocumentSyncDelete(uc.DB, *kb, doc); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"message":    "删除成功",
@@ -1915,36 +1962,101 @@ func encodeKnowledgeUploadContent(fileName string, fileData []byte) (string, err
 	return knowledgeUploadContentPrefix + string(b), nil
 }
 
-func decodeKnowledgeUploadContent(content string) (string, []byte, bool, error) {
+func encodeKnowledgeUploadFilePath(fileName, filePath string) (string, error) {
+	payload := map[string]string{
+		"file_name": sanitizeKnowledgeUploadFileName(fileName),
+		"file_path": filePath,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return knowledgeUploadFilePathPrefix + string(b), nil
+}
+
+func tryDeleteLocalFileOfDocument(content string) {
 	raw := strings.TrimSpace(content)
-	if !strings.HasPrefix(raw, knowledgeUploadContentPrefix) {
-		return "", nil, false, nil
+	if !strings.HasPrefix(raw, knowledgeUploadFilePathPrefix) {
+		return
 	}
-
-	jsonPart := strings.TrimSpace(strings.TrimPrefix(raw, knowledgeUploadContentPrefix))
+	jsonPart := strings.TrimSpace(strings.TrimPrefix(raw, knowledgeUploadFilePathPrefix))
 	if jsonPart == "" {
-		return "", nil, true, fmt.Errorf("上传文件元数据为空")
+		return
 	}
-
 	var payload struct {
-		FileName      string `json:"file_name"`
-		ContentBase64 string `json:"content_base64"`
+		FileName string `json:"file_name"`
+		FilePath string `json:"file_path"`
 	}
 	if err := json.Unmarshal([]byte(jsonPart), &payload); err != nil {
-		return "", nil, true, fmt.Errorf("解析上传文件元数据失败: %w", err)
+		log.Printf("[Knowledge][Cleanup] failed to parse file path payload: %v", err)
+		return
 	}
-	payload.FileName = sanitizeKnowledgeUploadFileName(payload.FileName)
-	if strings.TrimSpace(payload.ContentBase64) == "" {
-		return "", nil, true, fmt.Errorf("上传文件内容为空")
+	filePath := strings.TrimSpace(payload.FilePath)
+	if filePath == "" {
+		return
 	}
-	fileData, err := base64.StdEncoding.DecodeString(payload.ContentBase64)
-	if err != nil {
-		return "", nil, true, fmt.Errorf("解析上传文件内容失败: %w", err)
+	if err := os.Remove(filePath); err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("[Knowledge][Cleanup] failed to delete local file %s: %v", filePath, err)
+		}
+	} else {
+		log.Printf("[Knowledge][Cleanup] successfully deleted local file %s", filePath)
 	}
-	if len(fileData) == 0 {
-		return "", nil, true, fmt.Errorf("上传文件内容为空")
+}
+
+func decodeKnowledgeUploadContent(content string) (string, []byte, bool, error) {
+	raw := strings.TrimSpace(content)
+	if strings.HasPrefix(raw, knowledgeUploadContentPrefix) {
+		jsonPart := strings.TrimSpace(strings.TrimPrefix(raw, knowledgeUploadContentPrefix))
+		if jsonPart == "" {
+			return "", nil, true, fmt.Errorf("上传文件元数据为空")
+		}
+
+		var payload struct {
+			FileName      string `json:"file_name"`
+			ContentBase64 string `json:"content_base64"`
+		}
+		if err := json.Unmarshal([]byte(jsonPart), &payload); err != nil {
+			return "", nil, true, fmt.Errorf("解析上传文件元数据失败: %w", err)
+		}
+		payload.FileName = sanitizeKnowledgeUploadFileName(payload.FileName)
+		if strings.TrimSpace(payload.ContentBase64) == "" {
+			return "", nil, true, fmt.Errorf("上传文件内容为空")
+		}
+		fileData, err := base64.StdEncoding.DecodeString(payload.ContentBase64)
+		if err != nil {
+			return "", nil, true, fmt.Errorf("解析上传文件内容失败: %w", err)
+		}
+		if len(fileData) == 0 {
+			return "", nil, true, fmt.Errorf("上传文件内容为空")
+		}
+		return payload.FileName, fileData, true, nil
+	} else if strings.HasPrefix(raw, knowledgeUploadFilePathPrefix) {
+		jsonPart := strings.TrimSpace(strings.TrimPrefix(raw, knowledgeUploadFilePathPrefix))
+		if jsonPart == "" {
+			return "", nil, true, fmt.Errorf("上传文件路径元数据为空")
+		}
+
+		var payload struct {
+			FileName string `json:"file_name"`
+			FilePath string `json:"file_path"`
+		}
+		if err := json.Unmarshal([]byte(jsonPart), &payload); err != nil {
+			return "", nil, true, fmt.Errorf("解析上传文件路径元数据失败: %w", err)
+		}
+		payload.FileName = sanitizeKnowledgeUploadFileName(payload.FileName)
+		filePath := strings.TrimSpace(payload.FilePath)
+		if filePath == "" {
+			return "", nil, true, fmt.Errorf("上传文件存储路径为空")
+		}
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", nil, true, fmt.Errorf("读取上传文件失败(%s): %w", filePath, err)
+		}
+		return payload.FileName, fileData, true, nil
 	}
-	return payload.FileName, fileData, true, nil
+
+	return "", nil, false, nil
 }
 
 func (ac *AdminController) GetUserKnowledgeBasesAdmin(c *gin.Context) {
@@ -2114,6 +2226,9 @@ func (ac *AdminController) DeleteUserKnowledgeBaseAdmin(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除知识库失败"})
 		return
+	}
+	for _, doc := range docs {
+		tryDeleteLocalFileOfDocument(doc.Content)
 	}
 	for _, doc := range docs {
 		if err := enqueueKnowledgeDocumentSyncDelete(ac.DB, item, doc); err != nil {

@@ -217,11 +217,16 @@ func (a *AliyunFunASR) StreamingRecognize(ctx context.Context, audioStream <-cha
 				lastTextMu.Lock()
 				finalText := lastText
 				lastTextMu.Unlock()
+				var emptyReason string
+				if finalText == "" {
+					emptyReason = types.EmptyReasonProviderEmptyFinal
+				}
 				sendResult(types.StreamingResult{
-					Text:    finalText,
-					IsFinal: true,
-					AsrType: constants.AsrTypeAliyunFunASR,
-					Mode:    "online",
+					Text:        finalText,
+					IsFinal:     true,
+					AsrType:     constants.AsrTypeAliyunFunASR,
+					Mode:        "online",
+					EmptyReason: emptyReason,
 				})
 				return
 			case "task-failed":

@@ -347,11 +347,16 @@ func (a *AliyunQwen3ASR) StreamingRecognize(ctx context.Context, audioStream <-c
 					default:
 					}
 				}
+				var emptyReason string
+				if text == "" {
+					emptyReason = types.EmptyReasonProviderEmptyFinal
+				}
 				sendResult(types.StreamingResult{
-					Text:    text,
-					IsFinal: true,
-					AsrType: constants.AsrTypeAliyunQwen3,
-					Mode:    "online",
+					Text:        text,
+					IsFinal:     true,
+					AsrType:     constants.AsrTypeAliyunQwen3,
+					Mode:        "online",
+					EmptyReason: emptyReason,
 				})
 
 			case "session.finished":
