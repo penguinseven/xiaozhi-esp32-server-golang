@@ -34,3 +34,17 @@ Recent history uses Conventional Commit-style subjects such as `fix:`, `feat:`, 
 ## Security & Configuration Tips
 
 Do not commit real API keys, tokens, passwords, private endpoints, or generated agent scratch files. When adding configuration, update the relevant structs, defaults in `config/`, and documentation in `doc/`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs for this repo live as GitHub issues, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage roles map to the default labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/` for decisions. See `docs/agents/domain.md`.
