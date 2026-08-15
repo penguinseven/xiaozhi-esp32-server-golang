@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
+	"xiaozhi-esp32-server-golang/internal/constants"
 	"xiaozhi-esp32-server-golang/internal/domain/config/manager"
 	"xiaozhi-esp32-server-golang/internal/domain/config/memory"
 	redis_config "xiaozhi-esp32-server-golang/internal/domain/config/redis"
@@ -28,24 +29,24 @@ func InitConfigSystem(ctx context.Context) error {
 	// 获取配置提供者类型
 	providerType := viper.GetString("config_provider.type")
 	if providerType == "" {
-		providerType = "redis" // 默认使用redis
-		log.Infof("config_provider.type not set, using default: redis")
+		providerType = constants.ConfigProviderTypeMemory
+		log.Infof("config_provider.type not set, using default: memory")
 	}
 
 	log.Infof("Initializing config system with provider: %s", providerType)
 
 	// 根据配置提供者类型调用对应的Init方法
 	switch providerType {
-	case "manager":
+	case constants.ConfigProviderTypeManager:
 		manager.SetSystemConfigPushHandler(func(data map[string]interface{}) {
 			for _, h := range managerSystemConfigHandlers {
 				h(data)
 			}
 		})
 		return manager.Init(ctx)
-	case "redis":
+	case constants.ConfigProviderTypeRedis:
 		return redis_config.Init(ctx)
-	case "memory":
+	case constants.ConfigProviderTypeMemory:
 		return memory.Init(ctx)
 	default:
 		return fmt.Errorf("unsupported config provider type: %s", providerType)

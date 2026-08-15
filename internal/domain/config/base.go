@@ -2,6 +2,7 @@ package user_config
 
 import (
 	"fmt"
+	"sync"
 
 	"xiaozhi-esp32-server-golang/internal/domain/config/manager"
 	"xiaozhi-esp32-server-golang/internal/domain/config/memory"
@@ -15,29 +16,30 @@ type Config struct {
 	Parameters map[string]interface{} `json:"parameters"` // 存储相关配置参数
 }
 
-func GetProvider(sType string) (UserConfigProvider, error) {
-	config := make(map[string]interface{})
-	if sType == "manager" {
-		// 优先从环境变量获取backend地址，如果环境变量不存在则从配置获取
-		backendUrl := util.GetBackendURL()
-		config = map[string]interface{}{
-			"backend_url": backendUrl,
-			"auth_token":  util.GetManagerAuthToken(),
-		}
-	}
+var (
+	providerOnce     sync.Once
+	providerInstance UserConfigProvider
+	providerErr      error
+)
 
-	provider, err := GetUserConfigProvider(sType, config)
-	if err != nil {
-		return nil, err
-	}
-	return provider, nil
+// GetProvider 返回单例 ConfigProvider。首次调用时构造，后续调用返回同一实例。
+// sType 仅首次调用生效；调用方应传入 viper.GetString("config_provider.type")。
+func GetProvider(sType string) (UserConfigProvider, error) {
+	providerOnce.Do(func() {
+		config := make(map[string]interface{})
+		if sType == "manager" {
+			backendUrl := util.GetBackendURL()
+			config = map[string]interface{}{
+				"backend_url": backendUrl,
+				"auth_token":  util.GetManagerAuthToken(),
+			}
+		}
+		providerInstance, providerErr = GetUserConfigProvider(sType, config)
+	})
+	return providerInstance, providerErr
 }
 
-// GetUserConfigProvider 创建用户配置提供者
-// 根据传入的存储类型和配置参数创建对应的提供者实例
-// providerType: 提供者类型，支持 "redis", "memory", "file"
-// config: 提供者配置参数
-// 返回UserConfigProvider接口，支持完整的CRUD操作
+// GetUserConfigProvider 创建用户配置提供者（不缓存，每次构造新实例）
 func GetUserConfigProvider(providerType string, config map[string]interface{}) (UserConfigProvider, error) {
 	if config == nil {
 		config = make(map[string]interface{})
@@ -45,21 +47,18 @@ func GetUserConfigProvider(providerType string, config map[string]interface{}) (
 
 	switch providerType {
 	case "redis":
-		// 创建Redis用户配置提供者
 		provider, err := userconfig_redis.NewRedisUserConfigProvider(config)
 		if err != nil {
 			return nil, fmt.Errorf("创建Redis用户配置提供者失败: %v", err)
 		}
 		return provider, nil
 	case "manager":
-		// 创建后端管理系统用户配置提供者
 		provider, err := manager.NewManagerUserConfigProvider(config)
 		if err != nil {
 			return nil, fmt.Errorf("创建后端管理系统用户配置提供者失败: %v", err)
 		}
 		return provider, nil
 	case "memory":
-		// 创建内存用户配置提供者
 		provider, err := memory.NewMemoryUserConfigProvider(config)
 		if err != nil {
 			return nil, fmt.Errorf("创建内存用户配置提供者失败: %v", err)
