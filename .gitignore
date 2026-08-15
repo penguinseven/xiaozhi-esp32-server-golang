@@ -58,3 +58,4 @@ vendor/
 # Go workspaces（个人环境配置）
 go.work.sum
 # go.work          # 根据团队约定决定是否提交
+interrupt_history
