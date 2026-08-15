@@ -9,12 +9,12 @@ import (
 	"time"
 	. "xiaozhi-esp32-server-golang/internal/data/client"
 	chathooks "xiaozhi-esp32-server-golang/internal/domain/chat/hooks"
-	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/tts"
 	ttsstream "xiaozhi-esp32-server-golang/internal/domain/tts/streaming"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 	"xiaozhi-esp32-server-golang/internal/pool"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
 // 会话级全局音频队列元素类型常量
@@ -57,8 +57,8 @@ const SessionAudioQueueCap = 150
 
 type TTSQueueItem struct {
 	ctx         context.Context
-	llmResponse llm_common.LLMResponseStruct        // 单条模式使用
-	StreamChan  <-chan llm_common.LLMResponseStruct // 流式模式：非 nil 时优先从此 channel 读
+	llmResponse llm.LLMResponse        // 单条模式使用
+	StreamChan  <-chan llm.LLMResponse // 流式模式：非 nil 时优先从此 channel 读
 	enqueueSeq  uint64
 	generation  uint64
 	metricCycle uint64
@@ -118,7 +118,7 @@ type TTSManager struct {
 	audioMutex         sync.Mutex
 
 	// 双流式 TTS 内部 StreamChan：由 handleTextResponse 在 IsStart 时创建，IsEnd 时关闭
-	dualStreamChan     chan llm_common.LLMResponseStruct
+	dualStreamChan     chan llm.LLMResponse
 	dualStreamDone     chan struct{} // 双流式 isSync 等待用：StreamChan 对应的 onEndFunc 信号
 	dualStreamOwnerCtx context.Context
 	dualStreamMu       sync.Mutex
@@ -1313,7 +1313,7 @@ func (t *TTSManager) ClearTTSQueue() {
 }
 
 // handleTts 单条 TTS：生成并向 sessionAudioQueue 推送 SentenceStart → Frame… → SentenceEnd
-func (t *TTSManager) handleTts(ctx context.Context, generation uint64, metricCycle uint64, llmResponse llm_common.LLMResponseStruct, onStartFunc func(), onEndFunc func(error)) error {
+func (t *TTSManager) handleTts(ctx context.Context, generation uint64, metricCycle uint64, llmResponse llm.LLMResponse, onStartFunc func(), onEndFunc func(error)) error {
 	if strings.TrimSpace(llmResponse.Text) == "" {
 		if onEndFunc != nil {
 			onEndFunc(nil)
@@ -1416,7 +1416,7 @@ func signalDone(done chan<- struct{}) {
 	}
 }
 
-func safeCloseLLMResponseStream(ch chan llm_common.LLMResponseStruct) {
+func safeCloseLLMResponseStream(ch chan llm.LLMResponse) {
 	if ch == nil {
 		return
 	}
@@ -1426,7 +1426,7 @@ func safeCloseLLMResponseStream(ch chan llm_common.LLMResponseStruct) {
 	close(ch)
 }
 
-func sendLLMResponseToDualStream(ctx context.Context, ch chan llm_common.LLMResponseStruct, llmResponse llm_common.LLMResponseStruct) (err error) {
+func sendLLMResponseToDualStream(ctx context.Context, ch chan llm.LLMResponse, llmResponse llm.LLMResponse) (err error) {
 	if ch == nil {
 		return nil
 	}
@@ -1480,11 +1480,11 @@ func (t *TTSManager) waitForSync(ctx context.Context, done <-chan struct{}) erro
 // handleTextResponse 处理文本响应（异步 TTS 入队）。调用方按句多次调用，内部根据 SupportsDualStream() 自动决定：
 //   - 不支持双流式：每次 Push 一个单条 TTSQueueItem（与原逻辑一致）。
 //   - 支持双流式：IsStart 时创建内部 StreamChan 并 Push 一个流式 item，后续调用写入该 channel，IsEnd 时 close。
-func (t *TTSManager) handleTextResponse(ctx context.Context, llmResponse llm_common.LLMResponseStruct, isSync bool) error {
+func (t *TTSManager) handleTextResponse(ctx context.Context, llmResponse llm.LLMResponse, isSync bool) error {
 	return t.handleTextResponseWithHooks(ctx, llmResponse, isSync, nil, nil)
 }
 
-func (t *TTSManager) handleTextResponseWithHooks(ctx context.Context, llmResponse llm_common.LLMResponseStruct, isSync bool, onTTSItemEnqueued func() func(error), onTTSPlaybackStart func()) error {
+func (t *TTSManager) handleTextResponseWithHooks(ctx context.Context, llmResponse llm.LLMResponse, isSync bool, onTTSItemEnqueued func() func(error), onTTSPlaybackStart func()) error {
 	hasText := strings.TrimSpace(llmResponse.Text) != ""
 	if !hasText && !llmResponse.IsEnd && !llmResponse.IsStart {
 		return nil
@@ -1547,7 +1547,7 @@ func (t *TTSManager) handleTextResponseWithHooks(ctx context.Context, llmRespons
 	}
 
 	// 双流式模式
-	var streamChan chan llm_common.LLMResponseStruct
+	var streamChan chan llm.LLMResponse
 	var streamOwnerCtx context.Context
 	if llmResponse.IsStart {
 		streamEpoch := t.dualStreamEpoch.Load()
@@ -1559,7 +1559,7 @@ func (t *TTSManager) handleTextResponseWithHooks(ctx context.Context, llmRespons
 		t.dualStreamMu.Unlock()
 		safeCloseLLMResponseStream(oldStreamChan)
 
-		streamChan = make(chan llm_common.LLMResponseStruct, 16)
+		streamChan = make(chan llm.LLMResponse, 16)
 		var done chan struct{}
 		var onEndFunc func(error)
 		if onTTSItemEnqueued != nil {
@@ -1763,7 +1763,7 @@ func extractVoiceID(config map[string]interface{}) string {
 }
 
 // generateTtsOnly 方案 C：仅做 TTS 生成，不发送；返回音频 channel 与发送完成后需调用的 ReleaseFunc
-func (t *TTSManager) generateTtsOnly(ctx context.Context, metricCycle uint64, llmResponse llm_common.LLMResponseStruct) (outputChan <-chan []byte, releaseFunc func(), err error) {
+func (t *TTSManager) generateTtsOnly(ctx context.Context, metricCycle uint64, llmResponse llm.LLMResponse) (outputChan <-chan []byte, releaseFunc func(), err error) {
 	if strings.TrimSpace(llmResponse.Text) == "" {
 		return nil, nil, nil
 	}

@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	einotool "github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -18,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 func markTestClientConnected(client *McpClientInstance, lastPing time.Time) *McpClientInstance {
@@ -67,7 +66,7 @@ func TestGlobalMCPManager_StartStop(t *testing.T) {
 
 func TestMCPTool_Info(t *testing.T) {
 	tool := &McpTool{
-		info: &schema.ToolInfo{
+		info: &llm.Tool{
 			Name: "test_tool",
 			Desc: "测试工具",
 		},
@@ -84,7 +83,7 @@ func TestMCPTool_Info(t *testing.T) {
 
 func TestMCPTool_InvokableRun(t *testing.T) {
 	tool := &McpTool{
-		info: &schema.ToolInfo{
+		info: &llm.Tool{
 			Name: "test_tool",
 			Desc: "测试工具",
 		},
@@ -130,13 +129,13 @@ func TestGlobalMCPManager_GetToolByNameRejectsAmbiguousMatches(t *testing.T) {
 
 	manager.mu.Lock()
 	originalTools := manager.tools
-	manager.tools = map[string]einotool.InvokableTool{
+	manager.tools = map[string]llm.InvokableTool{
 		"server_a_shared_tool": &McpTool{
-			info:       &schema.ToolInfo{Name: "shared_tool"},
+			info:       &llm.Tool{Name: "shared_tool"},
 			serverName: "server_a",
 		},
 		"server_b_shared_tool": &McpTool{
-			info:       &schema.ToolInfo{Name: "shared_tool"},
+			info:       &llm.Tool{Name: "shared_tool"},
 			serverName: "server_b",
 		},
 	}
@@ -211,7 +210,7 @@ func TestGlobalMCPConnectionRefreshesToolsOnStandardNotification(t *testing.T) {
 
 	manager.mu.Lock()
 	originalTools := manager.tools
-	manager.tools = make(map[string]einotool.InvokableTool)
+	manager.tools = make(map[string]llm.InvokableTool)
 	manager.mu.Unlock()
 	t.Cleanup(func() {
 		manager.mu.Lock()
@@ -226,7 +225,7 @@ func TestGlobalMCPConnectionRefreshesToolsOnStandardNotification(t *testing.T) {
 			Url:     "mock://global",
 			Enabled: true,
 		},
-		tools: make(map[string]einotool.InvokableTool),
+		tools: make(map[string]llm.InvokableTool),
 	}
 
 	require.NoError(t, conn.connect())
@@ -283,7 +282,7 @@ func TestGlobalMCPManagerSchedulePeriodicToolsRefreshUpdatesGlobalTools(t *testi
 	originalServers := manager.servers
 	originalTools := manager.tools
 	manager.servers = make(map[string]*MCPServerConnection)
-	manager.tools = make(map[string]einotool.InvokableTool)
+	manager.tools = make(map[string]llm.InvokableTool)
 	manager.mu.Unlock()
 	t.Cleanup(func() {
 		manager.mu.Lock()
@@ -299,7 +298,7 @@ func TestGlobalMCPManagerSchedulePeriodicToolsRefreshUpdatesGlobalTools(t *testi
 			Url:     "mock://global",
 			Enabled: true,
 		},
-		tools: make(map[string]einotool.InvokableTool),
+		tools: make(map[string]llm.InvokableTool),
 	}
 
 	require.NoError(t, conn.connect())
@@ -341,7 +340,7 @@ func TestGlobalMCPConnectionFailsWhenInitialToolsListFails(t *testing.T) {
 
 	manager.mu.Lock()
 	originalTools := manager.tools
-	manager.tools = make(map[string]einotool.InvokableTool)
+	manager.tools = make(map[string]llm.InvokableTool)
 	manager.mu.Unlock()
 	t.Cleanup(func() {
 		manager.mu.Lock()
@@ -356,7 +355,7 @@ func TestGlobalMCPConnectionFailsWhenInitialToolsListFails(t *testing.T) {
 			Url:     "mock://global",
 			Enabled: true,
 		},
-		tools: make(map[string]einotool.InvokableTool),
+		tools: make(map[string]llm.InvokableTool),
 	}
 
 	err := conn.connect()
@@ -420,7 +419,7 @@ func TestMCPGoStructures(t *testing.T) {
 // 创建测试工具
 func TestMCPTool_InvokableRun_NewTool(t *testing.T) {
 	testTool := &McpTool{
-		info: &schema.ToolInfo{
+		info: &llm.Tool{
 			Name: "test_tool",
 			Desc: "测试工具",
 		},
@@ -474,7 +473,7 @@ func TestMCPToolInvokableRunReconnectsOnRetryableRemoteCallError(t *testing.T) {
 	}
 
 	testTool := &McpTool{
-		info:       &schema.ToolInfo{Name: "maps_weather", Desc: "天气查询"},
+		info:       &llm.Tool{Name: "maps_weather", Desc: "天气查询"},
 		serverName: "高德地图",
 		client:     initialClient,
 	}
@@ -500,7 +499,7 @@ func TestMCPToolInvokableRunUsesOriginNameForRemoteCall(t *testing.T) {
 	}
 
 	testTool := &McpTool{
-		info:       &schema.ToolInfo{Name: "browser_click", Desc: "click"},
+		info:       &llm.Tool{Name: "browser_click", Desc: "click"},
 		originName: "browser.click",
 		serverName: "browser",
 		client:     new(client.Client),
@@ -532,11 +531,11 @@ func TestConvertMcpToolListToInvokableToolListSanitizesInvalidNames(t *testing.T
 
 func TestMcpClientInstanceGetToolByNameMatchesOriginName(t *testing.T) {
 	sanitizedTool := &McpTool{
-		info:       &schema.ToolInfo{Name: "browser_click"},
+		info:       &llm.Tool{Name: "browser_click"},
 		originName: "browser.click",
 	}
 	instance := &McpClientInstance{
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"browser_click": sanitizedTool,
 		},
 	}
@@ -1026,14 +1025,14 @@ func TestGlobalMCPManagerDisconnectRemovesGlobalTools(t *testing.T) {
 	originalServers := manager.servers
 	originalTools := manager.tools
 	manager.servers = make(map[string]*MCPServerConnection)
-	manager.tools = make(map[string]einotool.InvokableTool)
+	manager.tools = make(map[string]llm.InvokableTool)
 	conn := &MCPServerConnection{
 		config: MCPServerConfig{Name: "test-global-server"},
-		tools:  make(map[string]einotool.InvokableTool),
+		tools:  make(map[string]llm.InvokableTool),
 	}
 	manager.servers["test-global-server"] = conn
 	manager.tools["test-global-server_demo"] = &McpTool{
-		info:       &schema.ToolInfo{Name: "demo"},
+		info:       &llm.Tool{Name: "demo"},
 		serverName: "test-global-server",
 	}
 	manager.mu.Unlock()
@@ -1475,7 +1474,7 @@ func TestHeartbeatWsEndpointRuntimeSkipsToolsRefreshBeforeTenMinutesAndPings(t *
 		Ctx:        ctx,
 		cancel:     cancel,
 	}
-	instance.storeToolsSnapshot(make(map[string]einotool.InvokableTool))
+	instance.storeToolsSnapshot(make(map[string]llm.InvokableTool))
 	instance.setConnected(true)
 	require.NoError(t, instance.sendInitlize(context.Background()))
 
@@ -1512,7 +1511,7 @@ func TestHeartbeatWsEndpointRuntimeRefreshesToolsAfterTenMinutesAndPings(t *test
 		Ctx:        ctx,
 		cancel:     cancel,
 	}
-	instance.storeToolsSnapshot(make(map[string]einotool.InvokableTool))
+	instance.storeToolsSnapshot(make(map[string]llm.InvokableTool))
 	instance.setConnected(true)
 	require.NoError(t, instance.sendInitlize(context.Background()))
 
@@ -1548,7 +1547,7 @@ func TestHeartbeatWsEndpointRuntimePingsBeforeToolsRefreshFailure(t *testing.T) 
 		Ctx:        ctx,
 		cancel:     cancel,
 	}
-	instance.storeToolsSnapshot(make(map[string]einotool.InvokableTool))
+	instance.storeToolsSnapshot(make(map[string]llm.InvokableTool))
 	instance.setConnected(true)
 	require.NoError(t, instance.sendInitlize(context.Background()))
 
@@ -1639,21 +1638,21 @@ func TestGetToolByNameWithTransport_PrefersCurrentTransport(t *testing.T) {
 	}
 
 	wsTool := &McpTool{
-		info: &schema.ToolInfo{Name: "shared_tool"},
+		info: &llm.Tool{Name: "shared_tool"},
 	}
 	udpTool := &McpTool{
-		info: &schema.ToolInfo{Name: "shared_tool"},
+		info: &llm.Tool{Name: "shared_tool"},
 	}
 
 	session.iotOverMcpByTransport["websocket"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "websocket"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"shared_tool": wsTool,
 		},
 	}, time.Now())
 	session.iotOverMcpByTransport["mqtt_udp"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "mqtt_udp"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"shared_tool": udpTool,
 		},
 	}, time.Now())
@@ -1688,10 +1687,10 @@ func TestGetReportedToolsByDeviceID_RequiresCurrentOnlineTransport(t *testing.T)
 		iotOverMcpByTransport: make(map[string]*McpClientInstance),
 	}
 
-	wsTool := &McpTool{info: &schema.ToolInfo{Name: "shared_tool"}}
+	wsTool := &McpTool{info: &llm.Tool{Name: "shared_tool"}}
 	session.iotOverMcpByTransport["websocket"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "websocket"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"shared_tool": wsTool,
 		},
 	}, time.Unix(300, 0))
@@ -1723,10 +1722,10 @@ func TestGetReportedToolsByDeviceID_ReturnsEmptyWhenResolverReturnsEmpty(t *test
 		iotOverMcpByTransport: make(map[string]*McpClientInstance),
 	}
 
-	udpTool := &McpTool{info: &schema.ToolInfo{Name: "shared_tool"}}
+	udpTool := &McpTool{info: &llm.Tool{Name: "shared_tool"}}
 	session.iotOverMcpByTransport["udp"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "udp"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"shared_tool": udpTool,
 		},
 	}, time.Unix(100, 0))
@@ -1760,27 +1759,27 @@ func TestGetReportedToolsByDeviceID_UsesResolvedCurrentTransport(t *testing.T) {
 		iotOverMcpByTransport: make(map[string]*McpClientInstance),
 	}
 
-	wsOnlyTool := &McpTool{info: &schema.ToolInfo{Name: "ws_only"}}
-	wsSharedTool := &McpTool{info: &schema.ToolInfo{Name: "shared_tool"}}
-	udpSharedTool := &McpTool{info: &schema.ToolInfo{Name: "shared_tool"}}
-	udpOnlyTool := &McpTool{info: &schema.ToolInfo{Name: "udp_only"}}
+	wsOnlyTool := &McpTool{info: &llm.Tool{Name: "ws_only"}}
+	wsSharedTool := &McpTool{info: &llm.Tool{Name: "shared_tool"}}
+	udpSharedTool := &McpTool{info: &llm.Tool{Name: "shared_tool"}}
+	udpOnlyTool := &McpTool{info: &llm.Tool{Name: "udp_only"}}
 
 	session.wsEndPointMcp.Store("ws-endpoint", &McpClientInstance{
 		serverName: "ws-endpoint",
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"ws_only":     wsOnlyTool,
 			"shared_tool": wsSharedTool,
 		},
 	})
 	session.iotOverMcpByTransport["websocket"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "websocket"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"shared_tool": wsSharedTool,
 		},
 	}, time.Unix(300, 0))
 	session.iotOverMcpByTransport["udp"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "udp"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"shared_tool": udpSharedTool,
 			"udp_only":    udpOnlyTool,
 		},
@@ -1826,18 +1825,18 @@ func TestGetReportedToolsByDeviceID_IgnoresUnsupportedIotTransport(t *testing.T)
 		iotOverMcpByTransport: make(map[string]*McpClientInstance),
 	}
 
-	serialTool := &McpTool{info: &schema.ToolInfo{Name: "serial_only"}}
-	udpTool := &McpTool{info: &schema.ToolInfo{Name: "udp_only"}}
+	serialTool := &McpTool{info: &llm.Tool{Name: "serial_only"}}
+	udpTool := &McpTool{info: &llm.Tool{Name: "udp_only"}}
 
 	session.iotOverMcpByTransport["serial"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "serial"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"serial_only": serialTool,
 		},
 	}, time.Unix(300, 0))
 	session.iotOverMcpByTransport["udp"] = markTestClientConnected(&McpClientInstance{
 		serverName: buildIotServerName(deviceID, "udp"),
-		tools: map[string]einotool.InvokableTool{
+		tools: map[string]llm.InvokableTool{
 			"udp_only": udpTool,
 		},
 	}, time.Unix(100, 0))
@@ -1883,8 +1882,8 @@ func TestRefreshReportedToolsByDeviceID_UsesRemoteToolsListAndUpdatesSnapshot(t 
 		mcpClient:  client.NewClient(transportInstance),
 		Ctx:        ctx,
 		cancel:     cancel,
-		tools: map[string]einotool.InvokableTool{
-			"stale_tool": &McpTool{info: &schema.ToolInfo{Name: "stale_tool"}},
+		tools: map[string]llm.InvokableTool{
+			"stale_tool": &McpTool{info: &llm.Tool{Name: "stale_tool"}},
 		},
 	}
 	instance.storeToolsSnapshot(instance.tools)
@@ -1937,8 +1936,8 @@ func TestRefreshReportedToolsByDeviceID_ClearsSnapshotOnFailure(t *testing.T) {
 		mcpClient:  client.NewClient(transportInstance),
 		Ctx:        ctx,
 		cancel:     cancel,
-		tools: map[string]einotool.InvokableTool{
-			"stale_tool": &McpTool{info: &schema.ToolInfo{Name: "stale_tool"}},
+		tools: map[string]llm.InvokableTool{
+			"stale_tool": &McpTool{info: &llm.Tool{Name: "stale_tool"}},
 		},
 	}
 	instance.storeToolsSnapshot(instance.tools)
@@ -1987,8 +1986,8 @@ func TestRefreshReportedToolsByAgentID_ClearsSnapshotOnFailure(t *testing.T) {
 		mcpClient:  client.NewClient(transportInstance),
 		Ctx:        ctx,
 		cancel:     cancel,
-		tools: map[string]einotool.InvokableTool{
-			"stale_tool": &McpTool{info: &schema.ToolInfo{Name: "stale_tool"}},
+		tools: map[string]llm.InvokableTool{
+			"stale_tool": &McpTool{info: &llm.Tool{Name: "stale_tool"}},
 		},
 	}
 	instance.storeToolsSnapshot(instance.tools)

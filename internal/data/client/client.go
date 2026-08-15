@@ -13,7 +13,7 @@ import (
 
 	utypes "xiaozhi-esp32-server-golang/internal/domain/config/types"
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
-	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
+	"xiaozhi-esp32-server-golang/internal/domain/llm/factory"
 	"xiaozhi-esp32-server-golang/internal/domain/memory"
 	"xiaozhi-esp32-server-golang/internal/domain/speaker"
 	"xiaozhi-esp32-server-golang/internal/domain/tts"
@@ -22,14 +22,13 @@ import (
 
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 )
 
 // Dialogue 表示对话历史
 type Dialogue struct {
 	mu       sync.RWMutex // 保护 Messages 的读写锁
-	Messages []*schema.Message
+	Messages []*llm.Message
 }
 
 const (
@@ -204,7 +203,7 @@ func (c *ClientState) GetDeviceIDOrAgentID() string {
 }
 
 // 历史消息相关的方法开始
-func (c *ClientState) AddMessage(msg *schema.Message) {
+func (c *ClientState) AddMessage(msg *llm.Message) {
 	if msg == nil {
 		log.Warnf("尝试添加 nil 消息到对话历史")
 		return
@@ -214,13 +213,13 @@ func (c *ClientState) AddMessage(msg *schema.Message) {
 	c.Dialogue.Messages = append(c.Dialogue.Messages, msg)
 }
 
-func (c *ClientState) GetMessages(count int) []*schema.Message {
+func (c *ClientState) GetMessages(count int) []*llm.Message {
 	c.Dialogue.mu.RLock()
 	defer c.Dialogue.mu.RUnlock()
 
 	// 添加边界检查，防止数组越界
 	if len(c.Dialogue.Messages) == 0 {
-		return []*schema.Message{}
+		return []*llm.Message{}
 	}
 
 	// 计算起始索引，确保不会越界
@@ -233,7 +232,7 @@ func (c *ClientState) GetMessages(count int) []*schema.Message {
 }
 
 /*
-func AlignMessage(messages []*schema.Message) []*schema.Message {
+func AlignMessage(messages []*llm.Message) []*llm.Message {
 	findMsgTypeUser := false
 	// 为保证消息完整性, 遍历 找到第一个User之后的消息
 	for i := 0; i < len(messages); i++ {
@@ -242,7 +241,7 @@ func AlignMessage(messages []*schema.Message) []*schema.Message {
 			continue
 		}
 		if !findMsgTypeUser {
-			if msg.Role == schema.User {
+			if msg.Role == llm.RoleUser {
 				return messages[i:]
 			}
 			continue
@@ -253,7 +252,7 @@ func AlignMessage(messages []*schema.Message) []*schema.Message {
 */
 // AlignToolMessages 保证 role:tool 消息中的 tool_call_id 与 role:assistant 消息中的 tool_calls 的 id 对应
 // 如果不匹配则删除对应的 tool 消息，同时处理反向不匹配的场景
-func AlignToolMessages(messages []*schema.Message) []*schema.Message {
+func AlignToolMessages(messages []*llm.Message) []*llm.Message {
 	if len(messages) == 0 {
 		return messages
 	}
@@ -269,7 +268,7 @@ func AlignToolMessages(messages []*schema.Message) []*schema.Message {
 			continue
 		}
 
-		if msg.Role == schema.Assistant && len(msg.ToolCalls) > 0 {
+		if msg.Role == llm.RoleAssistant && len(msg.ToolCalls) > 0 {
 			for _, toolCall := range msg.ToolCalls {
 				if toolCall.ID != "" {
 					validToolCallIDs[toolCall.ID] = true
@@ -277,24 +276,24 @@ func AlignToolMessages(messages []*schema.Message) []*schema.Message {
 			}
 		}
 
-		if msg.Role == schema.Tool && msg.ToolCallID != "" {
+		if msg.Role == llm.RoleTool && msg.ToolCallID != "" {
 			usedToolCallIDs[msg.ToolCallID] = true
 		}
 	}
 
 	// 过滤消息，处理双向不匹配的情况
-	var alignedMessages []*schema.Message
+	var alignedMessages []*llm.Message
 	for _, msg := range messages {
 		if msg == nil {
 			continue
 		}
 
 		// 如果是 tool 消息，检查 tool_call_id 是否有效
-		if msg.Role == schema.Tool {
+		if msg.Role == llm.RoleTool {
 			if msg.ToolCallID != "" && validToolCallIDs[msg.ToolCallID] {
 				alignedMessages = append(alignedMessages, msg)
 			}
-		} else if msg.Role == schema.Assistant && len(msg.ToolCalls) > 0 {
+		} else if msg.Role == llm.RoleAssistant && len(msg.ToolCalls) > 0 {
 			// 处理 assistant 消息，检查是否有未使用的 tool_calls
 			for _, toolCall := range msg.ToolCalls {
 				if toolCall.ID != "" {
@@ -314,7 +313,7 @@ func AlignToolMessages(messages []*schema.Message) []*schema.Message {
 	return alignedMessages
 }
 
-func (c *ClientState) InitMessages(messages []*schema.Message) error {
+func (c *ClientState) InitMessages(messages []*llm.Message) error {
 	c.Dialogue.mu.Lock()
 	defer c.Dialogue.mu.Unlock()
 	c.Dialogue.Messages = AlignToolMessages(messages)
@@ -536,7 +535,7 @@ func (s *ClientState) getLLMProvider() (llm.LLMProvider, error) {
 	if providerName == "" {
 		providerName = "openai"
 	}
-	llmProvider, err := llm.GetLLMProvider(providerName, llmConfig.Config)
+	llmProvider, err := factory.GetLLMProvider(providerName, llmConfig.Config)
 	if err != nil {
 		return nil, fmt.Errorf("创建 LLM 提供者失败: %v", err)
 	}
@@ -688,8 +687,6 @@ type Llm struct {
 	Cancel context.CancelFunc
 	// LLM 提供者
 	LLMProvider llm.LLMProvider
-	//asr to text接收的通道
-	LLmRecvChannel chan llm_common.LLMResponseStruct
 }
 
 type SpeakReadyUDPConfig struct {

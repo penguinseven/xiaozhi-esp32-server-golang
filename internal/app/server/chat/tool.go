@@ -14,11 +14,10 @@ import (
 
 	data_client "xiaozhi-esp32-server-golang/internal/data/client"
 	"xiaozhi-esp32-server-golang/internal/domain/eventbus"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/mcp"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
 	mcp_go "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -28,7 +27,7 @@ type toolCallResponseSummary struct {
 }
 
 // handleToolCallResponse 处理工具调用响应
-func (l *LLMManager) handleToolCallResponse(ctx context.Context, respMsg *schema.Message, tools []schema.ToolCall, executor *toolCallExecutor) (toolCallResponseSummary, error) {
+func (l *LLMManager) handleToolCallResponse(ctx context.Context, respMsg *llm.Message, tools []llm.ToolCall, executor *toolCallExecutor) (toolCallResponseSummary, error) {
 	if len(tools) == 0 {
 		return toolCallResponseSummary{}, nil
 	}
@@ -44,7 +43,7 @@ func (l *LLMManager) handleToolCallResponse(ctx context.Context, respMsg *schema
 		executor.Submit(tools)
 	}
 
-	var messageList []*schema.Message
+	var messageList []*llm.Message
 
 	// 只有当respMsg有内容（Content不为空或ToolCalls不为空）时才添加到messageList
 	// 避免保存空的assistant消息导致后续LLM调用出现400错误
@@ -78,7 +77,7 @@ func (l *LLMManager) handleToolCallResponse(ctx context.Context, respMsg *schema
 		for _, msg := range messageList {
 			// 过滤掉Content为空的assistant消息，避免保存到历史记录中
 			// 空的assistant消息会导致后续LLM调用时出现400错误
-			if msg != nil && msg.Role == schema.Assistant && msg.Content == "" && len(msg.ToolCalls) == 0 {
+			if msg != nil && msg.Role == llm.RoleAssistant && msg.Content == "" && len(msg.ToolCalls) == 0 {
 				log.Debugf("跳过保存空的assistant消息")
 				continue
 			}
@@ -121,7 +120,7 @@ func (l *LLMManager) handleToolCallResponse(ctx context.Context, respMsg *schema
 
 type toolCallExecutionResult struct {
 	order                   int
-	message                 *schema.Message
+	message                 *llm.Message
 	invokeToolSuccess       bool
 	findExitTool            bool
 	shouldStopLLMProcessing bool
@@ -156,7 +155,7 @@ func newToolCallExecutor(manager *LLMManager, ctx context.Context) *toolCallExec
 	}
 }
 
-func (e *toolCallExecutor) Submit(toolCalls []schema.ToolCall) {
+func (e *toolCallExecutor) Submit(toolCalls []llm.ToolCall) {
 	for _, tc := range toolCalls {
 		toolCall := ensureToolCallID(tc)
 		callID := toolCall.ID
@@ -183,7 +182,7 @@ func (e *toolCallExecutor) Submit(toolCalls []schema.ToolCall) {
 	}
 }
 
-func ensureToolCallID(toolCall schema.ToolCall) schema.ToolCall {
+func ensureToolCallID(toolCall llm.ToolCall) llm.ToolCall {
 	if strings.TrimSpace(toolCall.ID) != "" {
 		return toolCall
 	}
@@ -198,12 +197,12 @@ func ensureToolCallID(toolCall schema.ToolCall) schema.ToolCall {
 	return toolCall
 }
 
-func normalizeToolCallIDs(toolCalls []schema.ToolCall) []schema.ToolCall {
+func normalizeToolCallIDs(toolCalls []llm.ToolCall) []llm.ToolCall {
 	if len(toolCalls) == 0 {
 		return toolCalls
 	}
 
-	normalized := make([]schema.ToolCall, len(toolCalls))
+	normalized := make([]llm.ToolCall, len(toolCalls))
 	for i, tc := range toolCalls {
 		normalized[i] = ensureToolCallID(tc)
 	}
@@ -227,9 +226,9 @@ func (e *toolCallExecutor) WaitMedia() {
 	e.mediaWg.Wait()
 }
 
-func (e *toolCallExecutor) executeToolCall(order int, toolCall schema.ToolCall) toolCallExecutionResult {
-	resultMessage := &schema.Message{
-		Role:       schema.Tool,
+func (e *toolCallExecutor) executeToolCall(order int, toolCall llm.ToolCall) toolCallExecutionResult {
+	resultMessage := &llm.Message{
+		Role:       llm.RoleTool,
 		ToolCallID: toolCall.ID,
 	}
 
@@ -325,7 +324,7 @@ func (e *toolCallExecutor) executeToolCall(order int, toolCall schema.ToolCall) 
 	return execResult
 }
 
-func (l *LLMManager) handleResourceLink(ctx context.Context, resourceLink mcp_go.ResourceLink, toolCall tool.InvokableTool, wg *sync.WaitGroup) error {
+func (l *LLMManager) handleResourceLink(ctx context.Context, resourceLink mcp_go.ResourceLink, toolCall llm.InvokableTool, wg *sync.WaitGroup) error {
 	wg.Add(1)
 
 	source, err := buildMediaSourceFromResourceLink(resourceLink, toolCall)
@@ -407,7 +406,7 @@ func buildMediaSourceFromAudioContent(title string, audioContent mcp_go.AudioCon
 	}, nil
 }
 
-func buildMediaSourceFromResourceLink(resourceLink mcp_go.ResourceLink, toolCall tool.InvokableTool) (MediaSourceDescriptor, error) {
+func buildMediaSourceFromResourceLink(resourceLink mcp_go.ResourceLink, toolCall llm.InvokableTool) (MediaSourceDescriptor, error) {
 	mcpTool, ok := toolCall.(*mcp.McpTool)
 	if !ok || mcpTool == nil {
 		return MediaSourceDescriptor{}, fmt.Errorf("resource link 播放仅支持 MCP 远程工具")

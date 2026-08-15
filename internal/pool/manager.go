@@ -9,11 +9,12 @@ import (
 
 	"xiaozhi-esp32-server-golang/internal/domain/asr"
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
+	"xiaozhi-esp32-server-golang/internal/domain/llm/factory"
 	"xiaozhi-esp32-server-golang/internal/domain/tts"
 	"xiaozhi-esp32-server-golang/internal/domain/vad"
 	vad_inter "xiaozhi-esp32-server-golang/internal/domain/vad/inter"
-	"xiaozhi-esp32-server-golang/internal/util"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	"xiaozhi-esp32-server-golang/internal/util"
 
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/spf13/viper"
@@ -49,33 +50,33 @@ func GetGlobalResourcePoolManager() *UniversalResourcePoolManager {
 	return globalManager
 }
 
-// ResourceTypeOption 资源类型注册选项
-type ResourceTypeOption func(*ResourceTypeConfig)
+// ResourceTypeOption 资源类型注册选项（泛型）
+type ResourceTypeOption[T any] func(*ResourceTypeConfig[T])
 
-// ResourceTypeConfig 资源类型配置
-type ResourceTypeConfig struct {
-	CloseFunc   func(interface{}) error
-	IsValidFunc func(interface{}) bool
-	ResetFunc   func(interface{}) error
+// ResourceTypeConfig 资源类型配置（泛型：回调直接使用资源类型 T，无需 interface{} 断言）
+type ResourceTypeConfig[T any] struct {
+	CloseFunc   func(T) error
+	IsValidFunc func(T) bool
+	ResetFunc   func(T) error
 }
 
 // WithCloseFunc 设置关闭函数
-func WithCloseFunc(fn func(interface{}) error) ResourceTypeOption {
-	return func(c *ResourceTypeConfig) {
+func WithCloseFunc[T any](fn func(T) error) ResourceTypeOption[T] {
+	return func(c *ResourceTypeConfig[T]) {
 		c.CloseFunc = fn
 	}
 }
 
 // WithIsValidFunc 设置验证函数
-func WithIsValidFunc(fn func(interface{}) bool) ResourceTypeOption {
-	return func(c *ResourceTypeConfig) {
+func WithIsValidFunc[T any](fn func(T) bool) ResourceTypeOption[T] {
+	return func(c *ResourceTypeConfig[T]) {
 		c.IsValidFunc = fn
 	}
 }
 
 // WithResetFunc 设置重置函数
-func WithResetFunc(fn func(interface{}) error) ResourceTypeOption {
-	return func(c *ResourceTypeConfig) {
+func WithResetFunc[T any](fn func(T) error) ResourceTypeOption[T] {
+	return func(c *ResourceTypeConfig[T]) {
 		c.ResetFunc = fn
 	}
 }
@@ -87,7 +88,7 @@ func WithResetFunc(fn func(interface{}) error) ResourceTypeOption {
 func RegisterResourceType[T any](
 	resourceType string,
 	creator CreatorFunc[T],
-	opts ...ResourceTypeOption,
+	opts ...ResourceTypeOption[T],
 ) error {
 	mgr := GetGlobalResourcePoolManager()
 	mgr.mu.Lock()
@@ -101,20 +102,20 @@ func RegisterResourceType[T any](
 	// 注册 creator
 	mgr.creators[resourceType] = creator
 
-	// 应用选项
-	config := &ResourceTypeConfig{}
+	// 应用选项（类型化回调在此收窄为 interface{} 存储，仅供同类型资源经 getOrCreatePool[T] 取用）
+	config := &ResourceTypeConfig[T]{}
 	for _, opt := range opts {
 		opt(config)
 	}
 
 	if config.CloseFunc != nil {
-		mgr.closeFuncs[resourceType] = config.CloseFunc
+		mgr.closeFuncs[resourceType] = func(p interface{}) error { return config.CloseFunc(p.(T)) }
 	}
 	if config.IsValidFunc != nil {
-		mgr.isValidFuncs[resourceType] = config.IsValidFunc
+		mgr.isValidFuncs[resourceType] = func(p interface{}) bool { return config.IsValidFunc(p.(T)) }
 	}
 	if config.ResetFunc != nil {
-		mgr.resetFuncs[resourceType] = config.ResetFunc
+		mgr.resetFuncs[resourceType] = func(p interface{}) error { return config.ResetFunc(p.(T)) }
 	}
 
 	log.Infof("注册资源类型: %s", resourceType)
@@ -386,21 +387,21 @@ func init() {
 			}
 			return vadProvider, nil
 		},
-		WithCloseFunc(func(p interface{}) error {
-			if vadProvider, ok := p.(vad_inter.VAD); ok && vadProvider != nil {
-				return vadProvider.Close()
+		WithCloseFunc(func(p vad_inter.VAD) error {
+			if p != nil {
+				return p.Close()
 			}
 			return nil
 		}),
-		WithIsValidFunc(func(p interface{}) bool {
-			if vadProvider, ok := p.(vad_inter.VAD); ok && vadProvider != nil {
-				return vadProvider.IsValid()
+		WithIsValidFunc(func(p vad_inter.VAD) bool {
+			if p != nil {
+				return p.IsValid()
 			}
 			return false
 		}),
-		WithResetFunc(func(p interface{}) error {
-			if vadProvider, ok := p.(vad_inter.VAD); ok && vadProvider != nil {
-				return vadProvider.Reset()
+		WithResetFunc(func(p vad_inter.VAD) error {
+			if p != nil {
+				return p.Reset()
 			}
 			return nil
 		}),
@@ -412,15 +413,15 @@ func init() {
 		func(rt, p string, cfg map[string]interface{}) (asr.AsrProvider, error) {
 			return asr.NewAsrProvider(p, cfg)
 		},
-		WithIsValidFunc(func(p interface{}) bool {
-			if asrProvider, ok := p.(asr.AsrProvider); ok && asrProvider != nil {
-				return asrProvider.IsValid()
+		WithIsValidFunc(func(p asr.AsrProvider) bool {
+			if p != nil {
+				return p.IsValid()
 			}
 			return false
 		}),
-		WithCloseFunc(func(p interface{}) error {
-			if asrProvider, ok := p.(asr.AsrProvider); ok && asrProvider != nil {
-				return asrProvider.Close()
+		WithCloseFunc(func(p asr.AsrProvider) error {
+			if p != nil {
+				return p.Close()
 			}
 			return nil
 		}),
@@ -434,17 +435,17 @@ func init() {
 			if !ok || providerName == "" {
 				providerName = p
 			}
-			return llm.GetLLMProvider(providerName, cfg)
+			return factory.GetLLMProvider(providerName, cfg)
 		},
-		WithIsValidFunc(func(p interface{}) bool {
-			if llmProvider, ok := p.(llm.LLMProvider); ok && llmProvider != nil {
-				return llmProvider.IsValid()
+		WithIsValidFunc(func(p llm.LLMProvider) bool {
+			if p != nil {
+				return p.IsValid()
 			}
 			return false
 		}),
-		WithCloseFunc(func(p interface{}) error {
-			if llmProvider, ok := p.(llm.LLMProvider); ok && llmProvider != nil {
-				return llmProvider.Close()
+		WithCloseFunc(func(p llm.LLMProvider) error {
+			if p != nil {
+				return p.Close()
 			}
 			return nil
 		}),
@@ -456,15 +457,15 @@ func init() {
 		func(rt, p string, cfg map[string]interface{}) (tts.TTSProvider, error) {
 			return tts.GetTTSProvider(p, cfg)
 		},
-		WithIsValidFunc(func(p interface{}) bool {
-			if ttsProvider, ok := p.(tts.TTSProvider); ok && ttsProvider != nil {
-				return ttsProvider.IsValid()
+		WithIsValidFunc(func(p tts.TTSProvider) bool {
+			if p != nil {
+				return p.IsValid()
 			}
 			return false
 		}),
-		WithCloseFunc(func(p interface{}) error {
-			if ttsProvider, ok := p.(tts.TTSProvider); ok && ttsProvider != nil {
-				return ttsProvider.Close()
+		WithCloseFunc(func(p tts.TTSProvider) error {
+			if p != nil {
+				return p.Close()
 			}
 			return nil
 		}),

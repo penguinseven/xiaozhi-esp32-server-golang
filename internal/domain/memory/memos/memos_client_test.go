@@ -2,12 +2,12 @@ package memos
 
 import (
 	"context"
+
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 func TestAddMessage(t *testing.T) {
@@ -34,7 +34,7 @@ func TestAddMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := c.AddMessage(context.Background(), "agent1", schema.Message{Role: schema.User, Content: "hello"}); err != nil {
+	if err := c.AddMessage(context.Background(), "agent1", llm.Message{Role: llm.RoleUser, Content: "hello"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -72,7 +72,7 @@ func TestAddMessage_EmptyAgentID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.AddMessage(context.Background(), "", schema.Message{Role: schema.User, Content: "hello"})
+	err = c.AddMessage(context.Background(), "", llm.Message{Role: llm.RoleUser, Content: "hello"})
 	if err == nil {
 		t.Fatal("expected error when agentID is empty")
 	}

@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 
 	. "xiaozhi-esp32-server-golang/internal/data/client"
@@ -23,14 +21,13 @@ import (
 	"xiaozhi-esp32-server-golang/internal/domain/config/types"
 	"xiaozhi-esp32-server-golang/internal/domain/eventbus"
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
-	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
 	"xiaozhi-esp32-server-golang/internal/domain/mcp"
 	"xiaozhi-esp32-server-golang/internal/domain/memory"
 	"xiaozhi-esp32-server-golang/internal/domain/memory/llm_memory"
 	"xiaozhi-esp32-server-golang/internal/domain/openclaw"
 	"xiaozhi-esp32-server-golang/internal/domain/speaker"
-	"xiaozhi-esp32-server-golang/internal/util"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	"xiaozhi-esp32-server-golang/internal/util"
 )
 
 type AsrResponseChannelItem struct {
@@ -103,7 +100,7 @@ type ChatSession struct {
 	detectLLMDebounceTimer *time.Timer
 
 	openClawStreamMu sync.Mutex
-	openClawStreams  map[string]chan llm_common.LLMResponseStruct
+	openClawStreams  map[string]chan llm.LLMResponse
 
 	openClawWarmupMu sync.Mutex
 	openClawWarmup   *openClawWarmupTask
@@ -131,7 +128,7 @@ func NewChatSession(clientState *ClientState, serverTransport *ServerTransport, 
 		serverTransport:    serverTransport,
 		chatTextQueue:      util.NewQueue[AsrResponseChannelItem](10),
 		speakerResultReady: make(chan struct{}, 1), // 缓冲为1，避免阻塞
-		openClawStreams:    make(map[string]chan llm_common.LLMResponseStruct),
+		openClawStreams:    make(map[string]chan llm.LLMResponse),
 		hookHub:            hookHub,
 	}
 	for _, opt := range opts {
@@ -306,7 +303,7 @@ func (s *ChatSession) Start(pctx context.Context) error {
 
 // 初始化历史对话记录到内存中
 func (s *ChatSession) initHistoryMessages() error {
-	var historyMessages []*schema.Message
+	var historyMessages []*llm.Message
 	var err error
 
 	if s.clientState.GetMemoryMode() == MemoryModeNone {
@@ -376,7 +373,7 @@ func (s *ChatSession) shouldUseManager() bool {
 }
 
 // loadFromManager 从 Manager 数据库加载历史消息
-func (s *ChatSession) loadFromManager() ([]*schema.Message, error) {
+func (s *ChatSession) loadFromManager() ([]*llm.Message, error) {
 	// 创建 HistoryClient
 	historyCfg := history.HistoryClientConfig{
 		BaseURL:   util.GetBackendURL(),
@@ -387,7 +384,7 @@ func (s *ChatSession) loadFromManager() ([]*schema.Message, error) {
 	client := history.NewHistoryClient(historyCfg)
 
 	if s.clientState.DeviceID == "" || s.clientState.AgentID == "" {
-		return []*schema.Message{}, nil
+		return []*llm.Message{}, nil
 	}
 
 	req := &history.GetMessagesRequest{
@@ -402,19 +399,19 @@ func (s *ChatSession) loadFromManager() ([]*schema.Message, error) {
 		return nil, err
 	}
 
-	// 转换为 schema.Message 格式
-	messages := make([]*schema.Message, 0, len(resp.Messages))
+	// 转换为 llm.Message 格式
+	messages := make([]*llm.Message, 0, len(resp.Messages))
 	for _, item := range resp.Messages {
-		var msg *schema.Message
+		var msg *llm.Message
 		switch item.Role {
 		case "user":
-			msg = schema.UserMessage(item.Content)
+			msg = &llm.Message{Role: llm.RoleUser, Content: item.Content}
 		case "assistant":
-			msg = schema.AssistantMessage(item.Content, item.ToolCalls)
+			msg = &llm.Message{Role: llm.RoleAssistant, Content: item.Content, ToolCalls: item.ToolCalls}
 		case "tool":
-			msg = schema.ToolMessage(item.Content, item.ToolCallID)
+			msg = &llm.Message{Role: llm.RoleTool, Content: item.Content, ToolCallID: item.ToolCallID}
 		case "system":
-			msg = schema.SystemMessage(item.Content)
+			msg = &llm.Message{Role: llm.RoleSystem, Content: item.Content}
 		default:
 			log.Warnf("未知的消息角色: %s", item.Role)
 			continue
@@ -812,7 +809,7 @@ func (s *ChatSession) HandleNotActivated() {
 
 	sessionCtx := s.clientState.SessionCtx.Get(s.clientState.Ctx)
 	ctx := s.clientState.AfterAsrSessionCtx.Get(sessionCtx)
-	err = s.ttsManager.handleTextResponse(ctx, llm_common.LLMResponseStruct{
+	err = s.ttsManager.handleTextResponse(ctx, llm.LLMResponse{
 		Text: fmt.Sprintf("请在后台添加设备，激活码: %s", code),
 	}, false)
 	s.ttsManager.RequestTurnEnd(ctx, err)
@@ -848,7 +845,7 @@ func (s *ChatSession) HandleWelcome() {
 		}
 
 		s.ttsManager.EnqueueTtsStartWithReason(s.clientState.Ctx, "HandleWelcome")
-		err := s.ttsManager.handleTextResponse(ctx, llm_common.LLMResponseStruct{Text: greetingText}, true)
+		err := s.ttsManager.handleTextResponse(ctx, llm.LLMResponse{Text: greetingText}, true)
 		s.ttsManager.EnqueueTtsStopWithReason(s.clientState.Ctx, "HandleWelcome natural end")
 		s.ttsManager.RequestTurnEnd(ctx, err)
 	}(ctx, greetingText)
@@ -932,7 +929,7 @@ func (s *ChatSession) IsTTSActive() bool {
 	return s.ttsManager.ttsActive.Load()
 }
 
-func (s *ChatSession) getOrCreateOpenClawStream(correlationID string) (chan llm_common.LLMResponseStruct, bool, error) {
+func (s *ChatSession) getOrCreateOpenClawStream(correlationID string) (chan llm.LLMResponse, bool, error) {
 	correlationID = strings.TrimSpace(correlationID)
 	if correlationID == "" {
 		return nil, false, fmt.Errorf("missing correlation_id")
@@ -943,7 +940,7 @@ func (s *ChatSession) getOrCreateOpenClawStream(correlationID string) (chan llm_
 		s.openClawStreamMu.Unlock()
 		return existing, false, nil
 	}
-	streamChan := make(chan llm_common.LLMResponseStruct, 16)
+	streamChan := make(chan llm.LLMResponse, 16)
 	s.openClawStreams[correlationID] = streamChan
 	s.openClawStreamMu.Unlock()
 
@@ -993,7 +990,7 @@ func (s *ChatSession) closeOpenClawStream(correlationID string) {
 
 func (s *ChatSession) clearOpenClawStreams() {
 	s.openClawStreamMu.Lock()
-	s.openClawStreams = make(map[string]chan llm_common.LLMResponseStruct)
+	s.openClawStreams = make(map[string]chan llm.LLMResponse)
 	s.openClawStreamMu.Unlock()
 }
 
@@ -1058,7 +1055,7 @@ func (s *ChatSession) InjectOpenClawResponse(event openclaw.ResponseDelivery) er
 		s.cancelOpenClawWarmup(correlationID, false)
 	}
 
-	resp := llm_common.LLMResponseStruct{
+	resp := llm.LLMResponse{
 		Text:    text,
 		IsStart: isStart,
 		IsEnd:   event.IsEnd,
@@ -1355,7 +1352,7 @@ func (s *ChatSession) OnListenStart(startSeq uint64, shouldStartAudioIdleWindow 
 	}
 
 	// 定义消息保存回调
-	onMessageSave := func(userMsg *schema.Message, messageID string, audioData []float32) {
+	onMessageSave := func(userMsg *llm.Message, messageID string, audioData []float32) {
 		// ASR 文本和音频同时获取，一次性保存（不需要两阶段）
 		eventbus.Get().Publish(eventbus.TopicAddMessage, &eventbus.AddMessageEvent{
 			ClientState: s.clientState,
@@ -1458,7 +1455,7 @@ func (s *ChatSession) DoExitChat() {
 	goodbyeText := "好的，再见！期待下次与您聊天～"
 
 	// 保存一条 assistant 角色的消息
-	goodbyeMsg := schema.AssistantMessage(goodbyeText, nil)
+	goodbyeMsg := &llm.Message{Role: llm.RoleAssistant, Content: goodbyeText, ToolCalls: nil}
 	if err := s.llmManager.AddLlmMessage(s.clientState.Ctx, goodbyeMsg); err != nil {
 		log.Errorf("保存再见消息失败: %v", err)
 	}
@@ -1470,7 +1467,7 @@ func (s *ChatSession) DoExitChat() {
 	// 发送 TTS 再见语
 	s.ttsManager.EnqueueTtsStartWithReason(ctx, "ChatSession.processGoodbye")
 
-	err := s.ttsManager.handleTextResponse(ctx, llm_common.LLMResponseStruct{
+	err := s.ttsManager.handleTextResponse(ctx, llm.LLMResponse{
 		Text:    goodbyeText,
 		IsStart: true,
 		IsEnd:   true,
@@ -1675,8 +1672,8 @@ func (s *ChatSession) actionDoChat(ctx context.Context, text string, speakerResu
 	}
 
 	// 直接创建Eino原生消息
-	userMessage := &schema.Message{
-		Role:    schema.User,
+	userMessage := &llm.Message{
+		Role:    llm.RoleUser,
 		Content: text,
 	}
 
@@ -1689,7 +1686,7 @@ func (s *ChatSession) actionDoChat(ctx context.Context, text string, speakerResu
 	)
 	if err != nil {
 		log.Errorf("获取设备 %s 的工具失败: %v", clientState.DeviceID, err)
-		mcpTools = make(map[string]tool.InvokableTool)
+		mcpTools = make(map[string]llm.InvokableTool)
 	}
 	if !hasAvailableKnowledgeBase(clientState.DeviceConfig.KnowledgeBases) {
 		if _, ok := mcpTools["search_knowledge"]; ok {
@@ -1705,7 +1702,7 @@ func (s *ChatSession) actionDoChat(ctx context.Context, text string, speakerResu
 	}
 
 	// 转换MCP工具为Eino ToolInfo格式
-	einoTools, err := llm.ConvertMCPToolsToEinoTools(ctx, mcpToolsInterface)
+	einoTools, err := llm.ConvertMCPToolsToLLMTools(ctx, mcpToolsInterface)
 	if err != nil {
 		log.Errorf("转换MCP工具失败: %v", err)
 		einoTools = nil

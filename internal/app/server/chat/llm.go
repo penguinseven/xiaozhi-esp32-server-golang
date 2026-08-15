@@ -15,13 +15,11 @@ import (
 	config_types "xiaozhi-esp32-server-golang/internal/domain/config/types"
 	"xiaozhi-esp32-server-golang/internal/domain/eventbus"
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
-	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
 	"xiaozhi-esp32-server-golang/internal/domain/speaker"
+	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 	"xiaozhi-esp32-server-golang/internal/pool"
 	"xiaozhi-esp32-server-golang/internal/util"
-	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 )
 
@@ -63,8 +61,8 @@ func (l *LLMManager) GetLastMessageID(role string) (string, bool) {
 
 type LLMResponseChannelItem struct {
 	ctx          context.Context
-	userMessage  *schema.Message
-	responseChan chan llm_common.LLMResponseStruct
+	userMessage  *llm.Message
+	responseChan chan llm.LLMResponse
 	onStartFunc  func(args ...any)
 	onEndFunc    func(err error, args ...any)
 }
@@ -272,7 +270,7 @@ type LLMManager struct {
 	ttsManager        *TTSManager
 	transformRegistry *streamtransform.Registry
 
-	einoTools []*schema.ToolInfo
+	einoTools []*llm.Tool
 
 	llmResponseQueue *util.Queue[LLMResponseChannelItem]
 
@@ -325,9 +323,9 @@ func (l *LLMManager) emitLLMOutputRaw(ctx context.Context, data chathooks.LLMOut
 // 内部自动管理 LLM 资源的获取和释放
 func (l *LLMManager) handleLLMWithContextAndTools(
 	ctx context.Context,
-	dialogue []*schema.Message,
-	tools []*schema.ToolInfo,
-) (chan llm_common.LLMResponseStruct, error) {
+	dialogue []*llm.Message,
+	tools []*llm.Tool,
+) (chan llm.LLMResponse, error) {
 	// 获取 LLM 资源
 	llmWrapper, err := pool.Acquire[llm.LLMProvider](
 		"llm",
@@ -351,7 +349,7 @@ func (l *LLMManager) handleLLMWithContextAndTools(
 	}
 
 	// 创建响应 channel
-	responseChannel := make(chan llm_common.LLMResponseStruct, 2)
+	responseChannel := make(chan llm.LLMResponse, 2)
 	startTs := time.Now().UnixMilli()
 	var firstSegment bool
 	var rawFullText strings.Builder
@@ -373,7 +371,7 @@ func (l *LLMManager) handleLLMWithContextAndTools(
 		llmFirstTokenMarked := false
 
 		emitResponse := func(item streamtransform.Item) bool {
-			response := llm_common.LLMResponseStruct{
+			response := llm.LLMResponse{
 				IsEnd: item.IsEnd,
 			}
 
@@ -453,7 +451,7 @@ func (l *LLMManager) handleLLMWithContextAndTools(
 			})
 		}
 
-		pushRawToolCalls := func(toolCalls []schema.ToolCall) (bool, error) {
+		pushRawToolCalls := func(toolCalls []llm.ToolCall) (bool, error) {
 			payload, stop, hookErr := l.emitLLMOutputRaw(ctx, chathooks.LLMOutputRawData{
 				FullText:  rawFullText.String(),
 				ToolCalls: toolCalls,
@@ -583,12 +581,12 @@ func (l *LLMManager) AddTextToTTSQueue(text string) error {
 
 func (l *LLMManager) AddTextToTTSQueueWithOptions(text string, options llmResponseChannelOptions) error {
 	log.Debugf("AddTextToTTSQueue text: %s", text)
-	msg := &schema.Message{
-		Role:    schema.User,
+	msg := &llm.Message{
+		Role:    llm.RoleUser,
 		Content: text,
 	}
-	llmResponseChan := make(chan llm_common.LLMResponseStruct, 10)
-	llmResponseChan <- llm_common.LLMResponseStruct{
+	llmResponseChan := make(chan llm.LLMResponse, 10)
+	llmResponseChan <- llm.LLMResponse{
 		IsStart: true,
 		IsEnd:   true,
 		Text:    text,
@@ -641,15 +639,15 @@ func chainLLMResponseEndHooks(hooks ...func(err error, args ...any)) func(err er
 	}
 }
 
-func (l *LLMManager) HandleLLMResponseChannelAsync(ctx context.Context, userMessage *schema.Message, responseChan chan llm_common.LLMResponseStruct) error {
+func (l *LLMManager) HandleLLMResponseChannelAsync(ctx context.Context, userMessage *llm.Message, responseChan chan llm.LLMResponse) error {
 	return l.handleLLMResponseChannelAsync(ctx, userMessage, responseChan, llmResponseChannelOptions{})
 }
 
-func (l *LLMManager) HandleLLMResponseChannelAsyncWithOptions(ctx context.Context, userMessage *schema.Message, responseChan chan llm_common.LLMResponseStruct, options llmResponseChannelOptions) error {
+func (l *LLMManager) HandleLLMResponseChannelAsyncWithOptions(ctx context.Context, userMessage *llm.Message, responseChan chan llm.LLMResponse, options llmResponseChannelOptions) error {
 	return l.handleLLMResponseChannelAsync(ctx, userMessage, responseChan, options)
 }
 
-func (l *LLMManager) handleLLMResponseChannelAsync(ctx context.Context, userMessage *schema.Message, responseChan chan llm_common.LLMResponseStruct, options llmResponseChannelOptions) error {
+func (l *LLMManager) handleLLMResponseChannelAsync(ctx context.Context, userMessage *llm.Message, responseChan chan llm.LLMResponse, options llmResponseChannelOptions) error {
 	ctx = ensureTTSTurnTrackerInContext(ctx)
 	ctx = withTTSPlaybackStartHook(ctx, options.onTTSPlaybackStart)
 	ctx = withTTSTurnEndPolicy(ctx, options.ttsTurnEndPolicy)
@@ -717,14 +715,14 @@ func (l *LLMManager) handleLLMResponseChannelAsync(ctx context.Context, userMess
 			if nest <= 1 {
 				// 从 LLMManager 中获取 MessageID（Assistant 角色）
 				// 如果没有找到 MessageID，说明第一阶段保存未完成，不进行第二阶段更新
-				messageID, ok := l.GetLastMessageID(string(schema.Assistant))
+				messageID, ok := l.GetLastMessageID(string(llm.RoleAssistant))
 				if !ok {
 					log.Warnf("TTS 完成时未找到 MessageID，跳过第二阶段音频更新")
 					return
 				}
 
 				// 发布事件：第二阶段（更新音频）
-				assistantMsg := schema.AssistantMessage(strFullText, nil)
+				assistantMsg := &llm.Message{Role: llm.RoleAssistant, Content: strFullText, ToolCalls: nil}
 				eventbus.Get().Publish(eventbus.TopicAddMessage, &eventbus.AddMessageEvent{
 					ClientState: l.clientState,
 					Msg:         *assistantMsg,
@@ -759,7 +757,7 @@ func (l *LLMManager) handleLLMResponseChannelAsync(ctx context.Context, userMess
 	return nil
 }
 
-func (l *LLMManager) HandleLLMResponseChannelSync(ctx context.Context, userMessage *schema.Message, llmResponseChannel chan llm_common.LLMResponseStruct, einoTools []*schema.ToolInfo) (bool, error) {
+func (l *LLMManager) HandleLLMResponseChannelSync(ctx context.Context, userMessage *llm.Message, llmResponseChannel chan llm.LLMResponse, einoTools []*llm.Tool) (bool, error) {
 	ctx = ensureTTSTurnTrackerInContext(ctx)
 
 	needSendTtsCmd := true
@@ -823,14 +821,14 @@ func (l *LLMManager) HandleLLMResponseChannelSync(ctx context.Context, userMessa
 		if nest <= 1 {
 			// 从 LLMManager 中获取 MessageID（Assistant 角色）
 			// 如果没有找到 MessageID，说明第一阶段保存未完成，不进行第二阶段更新
-			messageID, ok := l.GetLastMessageID(string(schema.Assistant))
+			messageID, ok := l.GetLastMessageID(string(llm.RoleAssistant))
 			if !ok {
 				log.Warnf("TTS 完成时未找到 MessageID，跳过第二阶段音频更新")
 				return result.ok, err
 			}
 
 			// 发布事件：第二阶段（更新音频）
-			assistantMsg := schema.AssistantMessage(strFullText, nil)
+			assistantMsg := &llm.Message{Role: llm.RoleAssistant, Content: strFullText, ToolCalls: nil}
 			eventbus.Get().Publish(eventbus.TopicAddMessage, &eventbus.AddMessageEvent{
 				ClientState: l.clientState,
 				Msg:         *assistantMsg,
@@ -852,7 +850,7 @@ func (l *LLMManager) HandleLLMResponseChannelSync(ctx context.Context, userMessa
 }
 
 // handleLLMResponse 处理LLM响应
-func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.Message, llmResponseChannel chan llm_common.LLMResponseStruct) (llmHandleResult, error) {
+func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *llm.Message, llmResponseChannel chan llm.LLMResponse) (llmHandleResult, error) {
 	log.Debugf("handleLLMResponse start")
 	defer log.Debugf("handleLLMResponse end")
 
@@ -860,14 +858,14 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 	fullText := ctx.Value(fullTextKey).(*strings.Builder)
 	state := l.clientState
 	// toolCalls 使用局部变量（内部工具调用逻辑，不涉及聊天历史）
-	var toolCalls []schema.ToolCall
+	var toolCalls []llm.ToolCall
 	toolExecCtx := context.WithValue(ctx, "nest", 2)
 	toolExecCtx = context.WithValue(toolExecCtx, fullTextKey, fullText)
 	if speechStartHook := ttsPlaybackStartHookFromContext(ctx); speechStartHook != nil {
 		toolExecCtx = withTTSPlaybackStartHook(toolExecCtx, speechStartHook)
 	}
 	if l.clientState.GetMemoryMode() == MemoryModeNone && userMessage != nil {
-		toolExecCtx = appendToolRoundMessagesToContext(toolExecCtx, []*schema.Message{userMessage})
+		toolExecCtx = appendToolRoundMessagesToContext(toolExecCtx, []*llm.Message{userMessage})
 	}
 	ttsTracker := ttsTurnTrackerFromContext(ctx)
 	var onTTSItemEnqueued func() func(error)
@@ -890,7 +888,7 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 		if text == "" {
 			return
 		}
-		msg := schema.AssistantMessage(text, nil)
+		msg := &llm.Message{Role: llm.RoleAssistant, Content: text, ToolCalls: nil}
 		msg.Extra = map[string]any{
 			interruptExtraKey:      true,
 			interruptByExtraKey:    "user",
@@ -958,14 +956,14 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 					if len(toolCalls) == 0 {
 						//写到redis中
 						if userMessage != nil {
-							if userMessage.Role == schema.User {
+							if userMessage.Role == llm.RoleUser {
 								// 检查用户消息是否已经保存过（ASR 处理时已经保存）
 								// 通过检查最后一条消息是否是用户消息且内容匹配来判断
 								/*messages := l.clientState.GetMessages(1)
 								shouldSave := true
 								if len(messages) > 0 {
 									lastMsg := messages[len(messages)-1]
-									if lastMsg.Role == schema.User && lastMsg.Content == userMessage.Content {
+									if lastMsg.Role == llm.RoleUser && lastMsg.Content == userMessage.Content {
 										// 用户消息已经保存过了（ASR 处理时保存的），跳过
 										shouldSave = false
 										log.Debugf("用户消息已在 ASR 处理时保存，跳过重复保存: %s", userMessage.Content)
@@ -980,7 +978,7 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 						}
 						strFullText := fullText.String()
 						if strings.TrimSpace(strFullText) != "" || len(toolCalls) > 0 {
-							if err := l.AddLlmMessage(ctx, schema.AssistantMessage(strFullText, toolCalls)); err != nil {
+							if err := l.AddLlmMessage(ctx, &llm.Message{Role: llm.RoleAssistant, Content: strFullText, ToolCalls: toolCalls}); err != nil {
 								log.Errorf("保存助手消息失败: %v", err)
 							} else {
 								assistantSaved = true
@@ -988,7 +986,7 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 						}
 					}
 					if len(toolCalls) > 0 {
-						toolSummary, err := l.handleToolCallResponse(toolExecCtx, schema.AssistantMessage(fullText.String(), toolCalls), toolCalls, toolExecutor)
+						toolSummary, err := l.handleToolCallResponse(toolExecCtx, &llm.Message{Role: llm.RoleAssistant, Content: fullText.String(), ToolCalls: toolCalls}, toolCalls, toolExecutor)
 						if err != nil {
 							log.Errorf("处理工具调用响应失败: %v", err)
 							result.ok = true
@@ -1017,7 +1015,7 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 	}
 }
 
-func (l *LLMManager) DoLLmRequest(ctx context.Context, userMessage *schema.Message, einoTools []*schema.ToolInfo, isSync bool, speakerResult *speaker.IdentifyResult) error {
+func (l *LLMManager) DoLLmRequest(ctx context.Context, userMessage *llm.Message, einoTools []*llm.Tool, isSync bool, speakerResult *speaker.IdentifyResult) error {
 	log.Debugf("发送带工具的 LLM 请求, seesionID: %s, requestEinoMessages: %+v", l.clientState.SessionID, userMessage)
 	clientState := l.clientState
 
@@ -1084,7 +1082,7 @@ func (l *LLMManager) DoLLmRequest(ctx context.Context, userMessage *schema.Messa
 }
 
 // AddMessage 添加消息到聊天历史（统一入口，适用于所有消息类型）
-func (l *LLMManager) AddMessage(ctx context.Context, msg *schema.Message) error {
+func (l *LLMManager) AddMessage(ctx context.Context, msg *llm.Message) error {
 	if msg == nil {
 		log.Warnf("尝试添加 nil 消息到聊天历史")
 		return fmt.Errorf("消息不能为 nil")
@@ -1104,7 +1102,7 @@ func (l *LLMManager) AddMessage(ctx context.Context, msg *schema.Message) error 
 	l.clientState.AddMessage(msg)
 
 	// Tool 角色消息：直接保存，不涉及两阶段保存（无音频）
-	if msg.Role == schema.Tool {
+	if msg.Role == llm.RoleTool {
 		eventbus.Get().Publish(eventbus.TopicAddMessage, &eventbus.AddMessageEvent{
 			ClientState: l.clientState,
 			Msg:         *msg,
@@ -1121,7 +1119,7 @@ func (l *LLMManager) AddMessage(ctx context.Context, msg *schema.Message) error 
 
 	// User/Assistant 角色：两阶段保存
 	// 将 MessageID 存储到 LLMManager 中，供后续音频更新使用
-	if msg.Role == schema.User || msg.Role == schema.Assistant {
+	if msg.Role == llm.RoleUser || msg.Role == llm.RoleAssistant {
 		l.lastMessageIDMu.Lock()
 		l.lastMessageID[string(msg.Role)] = messageID
 		l.lastMessageIDMu.Unlock()
@@ -1144,16 +1142,16 @@ func (l *LLMManager) AddMessage(ctx context.Context, msg *schema.Message) error 
 }
 
 // AddLlmMessage 保持向后兼容，委托给 AddMessage
-func (l *LLMManager) AddLlmMessage(ctx context.Context, msg *schema.Message) error {
+func (l *LLMManager) AddLlmMessage(ctx context.Context, msg *llm.Message) error {
 	return l.AddMessage(ctx, msg)
 }
 
-func (l *LLMManager) GetMessages(ctx context.Context, userMessage *schema.Message, count int, speakerResult *speaker.IdentifyResult) []*schema.Message {
+func (l *LLMManager) GetMessages(ctx context.Context, userMessage *llm.Message, count int, speakerResult *speaker.IdentifyResult) []*llm.Message {
 	memoryMode := l.clientState.GetMemoryMode()
 	includeHistory := memoryMode != MemoryModeNone
 
 	// 从 dialogue 中获取上下文；none 模式下仅允许携带当前工具调用链的临时消息
-	messageList := make([]*schema.Message, 0)
+	messageList := make([]*llm.Message, 0)
 	if includeHistory {
 		messageList = l.clientState.GetMessages(count)
 		if userMessage != nil {
@@ -1212,15 +1210,15 @@ func (l *LLMManager) GetMessages(ctx context.Context, userMessage *schema.Messag
 
 	systemPrompt += buildKnowledgeSearchRoutingPolicy(l.clientState.DeviceConfig.KnowledgeBases)
 
-	retMessage := make([]*schema.Message, 0)
-	retMessage = append(retMessage, &schema.Message{
-		Role:    schema.System,
+	retMessage := make([]*llm.Message, 0)
+	retMessage = append(retMessage, &llm.Message{
+		Role:    llm.RoleSystem,
 		Content: systemPrompt,
 	})
 	// 过滤掉空的assistant消息，避免发送给LLM API时出现400错误
 	// 空的assistant消息（Content为空且ToolCalls为空）会导致API错误
 	for _, msg := range messageList {
-		if msg != nil && msg.Role == schema.Assistant && msg.Content == "" && len(msg.ToolCalls) == 0 {
+		if msg != nil && msg.Role == llm.RoleAssistant && msg.Content == "" && len(msg.ToolCalls) == 0 {
 			log.Debugf("过滤掉空的assistant消息，避免发送给LLM API")
 			continue
 		}
@@ -1235,7 +1233,7 @@ func (l *LLMManager) GetMessages(ctx context.Context, userMessage *schema.Messag
 		shouldAdd := true
 		if len(retMessage) > 0 {
 			lastMsg := retMessage[len(retMessage)-1]
-			if lastMsg.Role == schema.User && lastMsg.Content == userMessage.Content {
+			if lastMsg.Role == llm.RoleUser && lastMsg.Content == userMessage.Content {
 				// 最后一条消息已经是相同的用户消息，跳过添加
 				shouldAdd = false
 				//log.Debugf("最后一条消息已经是相同的用户消息，跳过重复添加: %s", userMessage.Content)
@@ -1296,11 +1294,11 @@ func buildKnowledgeSearchRoutingPolicy(knowledgeBases []config_types.KnowledgeBa
 	)
 }
 
-func trimTrailingUserMessages(messages []*schema.Message) []*schema.Message {
+func trimTrailingUserMessages(messages []*llm.Message) []*llm.Message {
 	end := len(messages)
 	for end > 0 {
 		msg := messages[end-1]
-		if msg == nil || msg.Role != schema.User {
+		if msg == nil || msg.Role != llm.RoleUser {
 			break
 		}
 		end--
@@ -1308,7 +1306,7 @@ func trimTrailingUserMessages(messages []*schema.Message) []*schema.Message {
 	return messages[:end]
 }
 
-func isInterruptedMessage(msg *schema.Message) bool {
+func isInterruptedMessage(msg *llm.Message) bool {
 	if msg == nil || msg.Extra == nil {
 		return false
 	}
@@ -1336,12 +1334,12 @@ func decorateInterruptedContent(content string) string {
 	return content + interruptContentSuffix
 }
 
-func cloneMessagesForRequest(messages []*schema.Message) []*schema.Message {
+func cloneMessagesForRequest(messages []*llm.Message) []*llm.Message {
 	if len(messages) == 0 {
 		return nil
 	}
 
-	cloned := make([]*schema.Message, 0, len(messages))
+	cloned := make([]*llm.Message, 0, len(messages))
 	for _, msg := range messages {
 		if msg == nil {
 			continue
@@ -1352,12 +1350,12 @@ func cloneMessagesForRequest(messages []*schema.Message) []*schema.Message {
 	return cloned
 }
 
-func toolRoundMessagesFromContext(ctx context.Context) []*schema.Message {
+func toolRoundMessagesFromContext(ctx context.Context) []*llm.Message {
 	if ctx == nil {
 		return nil
 	}
 
-	messages, ok := ctx.Value(toolRoundMessagesKey).([]*schema.Message)
+	messages, ok := ctx.Value(toolRoundMessagesKey).([]*llm.Message)
 	if !ok || len(messages) == 0 {
 		return nil
 	}
@@ -1401,7 +1399,7 @@ func waitForTTSTurnDrainIfRoot(ctx context.Context) error {
 	return tracker.Wait(ctx)
 }
 
-func appendToolRoundMessagesToContext(ctx context.Context, messages []*schema.Message) context.Context {
+func appendToolRoundMessagesToContext(ctx context.Context, messages []*llm.Message) context.Context {
 	if len(messages) == 0 {
 		return ctx
 	}
@@ -1415,27 +1413,20 @@ func appendToolRoundMessagesToContext(ctx context.Context, messages []*schema.Me
 	return context.WithValue(ctx, toolRoundMessagesKey, combined)
 }
 
-func cloneMessageForRequest(msg *schema.Message) *schema.Message {
+func cloneMessageForRequest(msg *llm.Message) *llm.Message {
 	if msg == nil {
 		return nil
 	}
 	msgCopy := *msg
 
 	if msg.ToolCalls != nil {
-		msgCopy.ToolCalls = append([]schema.ToolCall(nil), msg.ToolCalls...)
-	}
-	if msg.MultiContent != nil {
-		msgCopy.MultiContent = append([]schema.ChatMessagePart(nil), msg.MultiContent...)
+		msgCopy.ToolCalls = append([]llm.ToolCall(nil), msg.ToolCalls...)
 	}
 	if msg.Extra != nil {
 		msgCopy.Extra = make(map[string]any, len(msg.Extra))
 		for k, v := range msg.Extra {
 			msgCopy.Extra[k] = v
 		}
-	}
-	if msg.ResponseMeta != nil {
-		respMetaCopy := *msg.ResponseMeta
-		msgCopy.ResponseMeta = &respMetaCopy
 	}
 
 	return &msgCopy

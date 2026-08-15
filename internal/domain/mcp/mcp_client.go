@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/components/tool"
 	mcp_go "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -43,17 +43,17 @@ func isGlobalToolAllowed(toolKey string, selected map[string]struct{}) bool {
 	return false
 }
 
-func filterGlobalToolsBySelectedServices(globalTools map[string]tool.InvokableTool, selectedNames string) map[string]tool.InvokableTool {
+func filterGlobalToolsBySelectedServices(globalTools map[string]llm.InvokableTool, selectedNames string) map[string]llm.InvokableTool {
 	selected := parseSelectedMCPServiceNames(selectedNames)
 	if len(selected) == 0 {
-		result := make(map[string]tool.InvokableTool, len(globalTools))
+		result := make(map[string]llm.InvokableTool, len(globalTools))
 		for name, invokable := range globalTools {
 			result[name] = invokable
 		}
 		return result
 	}
 
-	result := make(map[string]tool.InvokableTool)
+	result := make(map[string]llm.InvokableTool)
 	for toolKey, invokable := range globalTools {
 		if isGlobalToolAllowed(toolKey, selected) {
 			result[toolKey] = invokable
@@ -62,11 +62,11 @@ func filterGlobalToolsBySelectedServices(globalTools map[string]tool.InvokableTo
 	return result
 }
 
-func GetToolByName(deviceId string, agentId string, toolName string, selectedMCPServiceNames string) (tool.InvokableTool, bool) {
+func GetToolByName(deviceId string, agentId string, toolName string, selectedMCPServiceNames string) (llm.InvokableTool, bool) {
 	return GetToolByNameWithTransport(deviceId, agentId, "", toolName, selectedMCPServiceNames)
 }
 
-func GetToolByNameWithTransport(deviceId string, agentId string, transportType string, toolName string, selectedMCPServiceNames string) (tool.InvokableTool, bool) {
+func GetToolByNameWithTransport(deviceId string, agentId string, transportType string, toolName string, selectedMCPServiceNames string) (llm.InvokableTool, bool) {
 	// 优先从本地管理器获取
 	localManager := GetLocalMCPManager()
 	tool, ok := localManager.GetToolByName(toolName)
@@ -261,12 +261,12 @@ func CloseDeviceIotOverMcp(deviceId string, conn ConnInterface) {
 	iotClient.closeWithReason("device_iot_closed")
 }
 
-func GetToolsByDeviceId(deviceId string, agentId string, selectedMCPServiceNames string) (map[string]tool.InvokableTool, error) {
+func GetToolsByDeviceId(deviceId string, agentId string, selectedMCPServiceNames string) (map[string]llm.InvokableTool, error) {
 	return GetToolsByDeviceIdWithTransport(deviceId, agentId, "", selectedMCPServiceNames)
 }
 
-func GetToolsByDeviceIdWithTransport(deviceId string, agentId string, transportType string, selectedMCPServiceNames string) (map[string]tool.InvokableTool, error) {
-	retTools := make(map[string]tool.InvokableTool)
+func GetToolsByDeviceIdWithTransport(deviceId string, agentId string, transportType string, selectedMCPServiceNames string) (map[string]llm.InvokableTool, error) {
+	retTools := make(map[string]llm.InvokableTool)
 
 	// 优先从本地管理器获取
 	localManager := GetLocalMCPManager()
@@ -329,7 +329,7 @@ func GetToolsByDeviceIdWithTransport(deviceId string, agentId string, transportT
 	return retTools, nil
 }
 
-func GetWsEndpointMcpTools(agentId string) (map[string]tool.InvokableTool, error) {
+func GetWsEndpointMcpTools(agentId string) (map[string]llm.InvokableTool, error) {
 	return mcpClientPool.GetWsEndpointMcpTools(agentId)
 }
 
@@ -346,8 +346,8 @@ func GetWsEndpointConnectionStatus(agentId string) (bool, int) {
 
 // GetReportedToolsByDeviceID 获取设备通过 Iot over MCP 上报的工具。
 // 控制台设备维度仅返回 websocket / mqtt_udp(udp) transport 下的工具，不混入 ws endpoint 等其它类型。
-func GetReportedToolsByDeviceID(deviceId string) (map[string]tool.InvokableTool, error) {
-	retTools := make(map[string]tool.InvokableTool)
+func GetReportedToolsByDeviceID(deviceId string) (map[string]llm.InvokableTool, error) {
+	retTools := make(map[string]llm.InvokableTool)
 	if deviceId == "" {
 		return retTools, nil
 	}
@@ -371,8 +371,8 @@ func GetReportedToolsByDeviceID(deviceId string) (map[string]tool.InvokableTool,
 
 // RefreshReportedToolsByDeviceID 强制向当前在线 transport 发起一次 tools/list。
 // 刷新失败时返回空列表，同时清空对应 runtime 的内存工具快照。
-func RefreshReportedToolsByDeviceID(deviceId string) (map[string]tool.InvokableTool, error) {
-	retTools := make(map[string]tool.InvokableTool)
+func RefreshReportedToolsByDeviceID(deviceId string) (map[string]llm.InvokableTool, error) {
+	retTools := make(map[string]llm.InvokableTool)
 	if deviceId == "" {
 		return retTools, nil
 	}
@@ -391,8 +391,8 @@ func RefreshReportedToolsByDeviceID(deviceId string) (map[string]tool.InvokableT
 }
 
 // GetReportedToolsByAgentID 仅获取智能体(WebSocket端点)上报的MCP工具
-func GetReportedToolsByAgentID(agentId string) (map[string]tool.InvokableTool, error) {
-	retTools := make(map[string]tool.InvokableTool)
+func GetReportedToolsByAgentID(agentId string) (map[string]llm.InvokableTool, error) {
+	retTools := make(map[string]llm.InvokableTool)
 	if agentId == "" {
 		return retTools, nil
 	}
@@ -402,8 +402,8 @@ func GetReportedToolsByAgentID(agentId string) (map[string]tool.InvokableTool, e
 
 // RefreshReportedToolsByAgentID 强制向智能体的 ws endpoint 发起一次 tools/list。
 // 刷新失败时返回空列表，同时清空对应 runtime 的内存工具快照。
-func RefreshReportedToolsByAgentID(agentId string) (map[string]tool.InvokableTool, error) {
-	retTools := make(map[string]tool.InvokableTool)
+func RefreshReportedToolsByAgentID(agentId string) (map[string]llm.InvokableTool, error) {
+	retTools := make(map[string]llm.InvokableTool)
 	if agentId == "" {
 		return retTools, nil
 	}
@@ -417,7 +417,7 @@ func RefreshReportedToolsByAgentID(agentId string) (map[string]tool.InvokableToo
 }
 
 // GetReportedToolByDeviceIDAndName 仅在设备上报工具中查找
-func GetReportedToolByDeviceIDAndName(deviceId, toolName string) (tool.InvokableTool, bool) {
+func GetReportedToolByDeviceIDAndName(deviceId, toolName string) (llm.InvokableTool, bool) {
 	if deviceId == "" {
 		return nil, false
 	}
@@ -437,7 +437,7 @@ func GetReportedToolByDeviceIDAndName(deviceId, toolName string) (tool.Invokable
 }
 
 // GetReportedToolByAgentIDAndName 仅在智能体上报工具中查找
-func GetReportedToolByAgentIDAndName(agentId, toolName string) (tool.InvokableTool, bool) {
+func GetReportedToolByAgentIDAndName(agentId, toolName string) (llm.InvokableTool, bool) {
 	reportedTools, err := GetReportedToolsByAgentID(agentId)
 	if err != nil {
 		log.Errorf("获取智能体上报MCP工具失败: agent=%s err=%v", agentId, err)
@@ -479,18 +479,18 @@ func RawCallReportedToolByAgentID(agentId, toolName string, arguments map[string
 }
 
 // GetReportedToolsByDeviceIdAndAgentId 兼容方法：明确分流设备/智能体查询，不再混用
-func GetReportedToolsByDeviceIdAndAgentId(deviceId string, agentId string) (map[string]tool.InvokableTool, error) {
+func GetReportedToolsByDeviceIdAndAgentId(deviceId string, agentId string) (map[string]llm.InvokableTool, error) {
 	if deviceId != "" {
 		return GetReportedToolsByDeviceID(deviceId)
 	}
 	if agentId != "" {
 		return GetReportedToolsByAgentID(agentId)
 	}
-	return make(map[string]tool.InvokableTool), nil
+	return make(map[string]llm.InvokableTool), nil
 }
 
 // GetReportedToolByName 兼容方法：按维度分流，不再混用
-func GetReportedToolByName(deviceId string, agentId string, toolName string) (tool.InvokableTool, bool) {
+func GetReportedToolByName(deviceId string, agentId string, toolName string) (llm.InvokableTool, bool) {
 	if deviceId != "" {
 		return GetReportedToolByDeviceIDAndName(deviceId, toolName)
 	}

@@ -4,22 +4,21 @@ import (
 	"context"
 	"fmt"
 
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/memory/mem0"
 	"xiaozhi-esp32-server-golang/internal/domain/memory/memobase"
 	"xiaozhi-esp32-server-golang/internal/domain/memory/memos"
 	"xiaozhi-esp32-server-golang/internal/domain/memory/nomemo"
-
-	"github.com/cloudwego/eino/schema"
 )
 
 // MemoryProvider 记忆提供者接口
 // 定义所有记忆提供者都需要实现的核心方法
 type MemoryProvider interface {
 	// AddMessage 添加一条消息到记忆
-	AddMessage(ctx context.Context, agentID string, msg schema.Message) error
+	AddMessage(ctx context.Context, agentID string, msg llm.Message) error
 
 	// GetMessages 获取用户的历史消息
-	GetMessages(ctx context.Context, agentId string, count int) ([]*schema.Message, error)
+	GetMessages(ctx context.Context, agentId string, count int) ([]*llm.Message, error)
 
 	// GetContext 获取用户的上下文信息，用于增强 LLM prompt
 	GetContext(ctx context.Context, agentId string, maxToken int) (string, error)

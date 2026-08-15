@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"xiaozhi-esp32-server-golang/internal/components/http"
-
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 // MessageType 消息类型
@@ -114,12 +113,12 @@ type GetMessagesResponse struct {
 
 // MessageItem 消息项（用于初始化加载，不包含音频）
 type MessageItem struct {
-	MessageID  string            `json:"message_id"`
-	Role       string            `json:"role"` // user/assistant/tool/system
-	Content    string            `json:"content"`
-	ToolCallID string            `json:"tool_call_id,omitempty"` // Tool 角色使用
-	ToolCalls  []schema.ToolCall `json:"tool_calls,omitempty"`   // Assistant 角色使用
-	CreatedAt  string            `json:"created_at"`
+	MessageID  string         `json:"message_id"`
+	Role       string         `json:"role"` // user/assistant/tool/system
+	Content    string         `json:"content"`
+	ToolCallID string         `json:"tool_call_id,omitempty"` // Tool 角色使用
+	ToolCalls  []llm.ToolCall `json:"tool_calls,omitempty"`   // Assistant 角色使用
+	CreatedAt  string         `json:"created_at"`
 }
 
 // GetMessages 从 Manager 数据库获取消息（用于初始化加载）

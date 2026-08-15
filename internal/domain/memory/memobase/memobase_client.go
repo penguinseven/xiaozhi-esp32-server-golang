@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	"github.com/memodb-io/memobase/src/client/memobase-go/blob"
 	"github.com/memodb-io/memobase/src/client/memobase-go/core"
@@ -125,7 +125,7 @@ func IsEnableSearch() bool {
 }
 
 // AddMessage 添加消息到Memobase
-func (m *MemobaseClient) AddMessage(ctx context.Context, agentID string, msg schema.Message) error {
+func (m *MemobaseClient) AddMessage(ctx context.Context, agentID string, msg llm.Message) error {
 	memobaseUserID := deviceIDToUUID(agentID)
 	// 构建消息
 	messages := []blob.OpenAICompatibleMessage{
@@ -248,7 +248,7 @@ func (m *MemobaseClient) Search(ctx context.Context, agentID string, query strin
 }
 
 // AddBatchMessages 批量添加消息到Memobase
-func (m *MemobaseClient) AddBatchMessages(ctx context.Context, userID string, messages []schema.Message) error {
+func (m *MemobaseClient) AddBatchMessages(ctx context.Context, userID string, messages []llm.Message) error {
 	m.Lock()
 	defer m.Unlock()
 
@@ -297,8 +297,8 @@ func (m *MemobaseClient) AddBatchMessages(ctx context.Context, userID string, me
 // GetMessages 获取用户的历史消息
 // 实现 BaseMemoryProvider 接口
 // 注意：Memobase 主要用于长期记忆和上下文增强，不提供历史消息检索功能
-func (m *MemobaseClient) GetMessages(ctx context.Context, agentID string, count int) ([]*schema.Message, error) {
-	return []*schema.Message{}, nil
+func (m *MemobaseClient) GetMessages(ctx context.Context, agentID string, count int) ([]*llm.Message, error) {
+	return []*llm.Message{}, nil
 }
 
 // ResetMemory 重置用户的记忆

@@ -9,12 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cloudwego/eino/schema"
-
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
-	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
-	"xiaozhi-esp32-server-golang/internal/pool"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	"xiaozhi-esp32-server-golang/internal/pool"
 )
 
 var openClawWarmupSchedule = []time.Duration{
@@ -439,7 +436,7 @@ func (s *ChatSession) speakOpenClawWarmupLine(task *openClawWarmupTask, text str
 		return task.sessionCtx.Err()
 	}
 
-	resp := llm_common.LLMResponseStruct{
+	resp := llm.LLMResponse{
 		Text:    text,
 		IsStart: task.takeWarmupSegmentStartFlag(),
 		IsEnd:   true,
@@ -459,9 +456,9 @@ func (s *ChatSession) generateOpenClawWarmupPlan(ctx context.Context, correlatio
 	}
 	defer pool.Release(llmWrapper)
 
-	dialogue := []*schema.Message{
-		schema.SystemMessage(openClawWarmupSystemPrompt),
-		schema.UserMessage(buildOpenClawWarmupUserPrompt(userText)),
+	dialogue := []*llm.Message{
+		&llm.Message{Role: llm.RoleSystem, Content: openClawWarmupSystemPrompt},
+		&llm.Message{Role: llm.RoleUser, Content: buildOpenClawWarmupUserPrompt(userText)},
 	}
 
 	msgChan := llmWrapper.GetProvider().ResponseWithContext(
@@ -511,7 +508,7 @@ func buildOpenClawWarmupSessionID(sessionID string, correlationID string) string
 	return base + ":warmup:" + correlationID
 }
 
-func collectOpenClawWarmupResponse(ctx context.Context, msgChan chan *schema.Message) (string, error) {
+func collectOpenClawWarmupResponse(ctx context.Context, msgChan <-chan *llm.Message) (string, error) {
 	var builder strings.Builder
 
 	for {

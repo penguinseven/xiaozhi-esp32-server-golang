@@ -10,8 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/schema"
-
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
@@ -67,7 +66,7 @@ func GetWithConfig(config map[string]interface{}) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) AddMessage(ctx context.Context, agentID string, msg schema.Message) error {
+func (c *Client) AddMessage(ctx context.Context, agentID string, msg llm.Message) error {
 	payload, err := c.newIdentityPayload(agentID)
 	if err != nil {
 		return err
@@ -83,7 +82,7 @@ func (c *Client) AddMessage(ctx context.Context, agentID string, msg schema.Mess
 	return nil
 }
 
-func (c *Client) GetMessages(ctx context.Context, agentID string, count int) ([]*schema.Message, error) {
+func (c *Client) GetMessages(ctx context.Context, agentID string, count int) ([]*llm.Message, error) {
 	if count <= 0 {
 		count = 20
 	}
@@ -99,28 +98,28 @@ func (c *Client) GetMessages(ctx context.Context, agentID string, count int) ([]
 
 	msgsRaw := getArrayField(data, "messages", "message_list", "items")
 	if len(msgsRaw) == 0 {
-		return []*schema.Message{}, nil
+		return []*llm.Message{}, nil
 	}
 
-	messages := make([]*schema.Message, 0, len(msgsRaw))
+	messages := make([]*llm.Message, 0, len(msgsRaw))
 	for _, item := range msgsRaw {
 		obj, ok := item.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		role := schema.Assistant
+		role := llm.RoleAssistant
 		if r, ok := obj["role"].(string); ok {
 			switch strings.ToLower(r) {
 			case "user":
-				role = schema.User
+				role = llm.RoleUser
 			case "assistant":
-				role = schema.Assistant
+				role = llm.RoleAssistant
 			case "system":
-				role = schema.System
+				role = llm.RoleSystem
 			}
 		}
 		content := getStringFromMap(obj, "content", "memory", "text")
-		messages = append(messages, &schema.Message{Role: role, Content: content})
+		messages = append(messages, &llm.Message{Role: role, Content: content})
 	}
 	return messages, nil
 }

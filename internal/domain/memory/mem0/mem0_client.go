@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/hackers365/mem0-go/client"
 	"github.com/hackers365/mem0-go/types"
 
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
@@ -152,7 +152,7 @@ func (m *Mem0Client) Get(userID string) (interface{}, error) {
 }
 
 // AddMessage 添加消息到记忆
-func (m *Mem0Client) AddMessage(ctx context.Context, agentID string, msg schema.Message) error {
+func (m *Mem0Client) AddMessage(ctx context.Context, agentID string, msg llm.Message) error {
 	message := types.Message{
 		Role:    string(msg.Role),
 		Content: msg.Content,
@@ -171,7 +171,7 @@ func (m *Mem0Client) AddMessage(ctx context.Context, agentID string, msg schema.
 }
 
 // GetMessages 获取用户的消息历史
-func (m *Mem0Client) GetMessages(ctx context.Context, agentID string, count int) ([]*schema.Message, error) {
+func (m *Mem0Client) GetMessages(ctx context.Context, agentID string, count int) ([]*llm.Message, error) {
 	var memoryOptions = types.MemoryOptions{
 		AgentID: agentID,
 	}
@@ -184,22 +184,22 @@ func (m *Mem0Client) GetMessages(ctx context.Context, agentID string, count int)
 		return nil, fmt.Errorf("failed to get messages for user %s: %w", agentID, err)
 	}
 
-	// 转换为 schema.Message 格式
-	var messages []*schema.Message
+	// 转换为 llm.Message 格式
+	var messages []*llm.Message
 	for _, result := range results {
 		// 从 metadata 中提取 role 和 content
-		role := schema.Assistant // 默认角色
+		role := llm.RoleAssistant // 默认角色
 		content := result.Memory
 
 		if result.Metadata != nil {
 			if r, ok := result.Metadata["role"].(string); ok {
 				switch r {
 				case "user":
-					role = schema.User
+					role = llm.RoleUser
 				case "assistant":
-					role = schema.Assistant
+					role = llm.RoleAssistant
 				case "system":
-					role = schema.System
+					role = llm.RoleSystem
 				}
 			}
 			if c, ok := result.Metadata["content"].(string); ok {
@@ -207,7 +207,7 @@ func (m *Mem0Client) GetMessages(ctx context.Context, agentID string, count int)
 			}
 		}
 
-		messages = append(messages, &schema.Message{
+		messages = append(messages, &llm.Message{
 			Role:    role,
 			Content: content,
 		})
@@ -279,7 +279,7 @@ func (m *Mem0Client) actionSearch(ctx context.Context, agentID string, query str
 }
 
 // AddBatchMessages 批量添加消息
-func (m *Mem0Client) AddBatchMessages(ctx context.Context, agentID string, messages []schema.Message) error {
+func (m *Mem0Client) AddBatchMessages(ctx context.Context, agentID string, messages []llm.Message) error {
 
 	// 准备批量消息
 	var batchMessages []string

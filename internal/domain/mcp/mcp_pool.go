@@ -4,8 +4,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 
-	"github.com/cloudwego/eino/components/tool"
 	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
@@ -85,7 +85,7 @@ func (p *McpClientPool) AddMcpClient(deviceID string, client *DeviceMcpSession) 
 	p.device2McpClient.Set(deviceID, client)
 }
 
-func (p *McpClientPool) GetToolByDeviceId(deviceId string, toolsName string) (tool.InvokableTool, bool) {
+func (p *McpClientPool) GetToolByDeviceId(deviceId string, toolsName string) (llm.InvokableTool, bool) {
 	client := p.GetMcpClient(deviceId)
 	if client == nil {
 		return nil, false
@@ -93,8 +93,8 @@ func (p *McpClientPool) GetToolByDeviceId(deviceId string, toolsName string) (to
 	return client.GetToolByName(toolsName)
 }
 
-func (p *McpClientPool) GetAllToolsByDeviceIdAndAgentId(deviceId string, agentId string) (map[string]tool.InvokableTool, error) {
-	retTools := make(map[string]tool.InvokableTool)
+func (p *McpClientPool) GetAllToolsByDeviceIdAndAgentId(deviceId string, agentId string) (map[string]llm.InvokableTool, error) {
+	retTools := make(map[string]llm.InvokableTool)
 	deviceClient := p.GetMcpClient(deviceId)
 	if deviceClient != nil {
 		deviceTools := deviceClient.GetTools()
@@ -112,8 +112,8 @@ func (p *McpClientPool) GetAllToolsByDeviceIdAndAgentId(deviceId string, agentId
 	return retTools, nil
 }
 
-func (p *McpClientPool) GetWsEndpointMcpTools(agentId string) (map[string]tool.InvokableTool, error) {
-	retTools := make(map[string]tool.InvokableTool)
+func (p *McpClientPool) GetWsEndpointMcpTools(agentId string) (map[string]llm.InvokableTool, error) {
+	retTools := make(map[string]llm.InvokableTool)
 	agentClient := p.GetMcpClient(agentId)
 	if agentClient == nil {
 		return retTools, nil

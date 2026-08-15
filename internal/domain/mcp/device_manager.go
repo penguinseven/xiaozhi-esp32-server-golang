@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/components/tool"
 	"github.com/gorilla/websocket"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -137,8 +137,8 @@ func (dcs *DeviceMcpSession) hasAnyClient() bool {
 type McpClientInstance struct {
 	serverName       string
 	mcpClient        *client.Client // 是从ws endpoint连上来的mcp server
-	tools            map[string]tool.InvokableTool
-	toolsState       atomic.Value // map[string]tool.InvokableTool，刷新时整体替换，读路径走快照
+	tools            map[string]llm.InvokableTool
+	toolsState       atomic.Value // map[string]llm.InvokableTool，刷新时整体替换，读路径走快照
 	serverInfo       *mcp.InitializeResult
 	Ctx              context.Context
 	cancel           context.CancelFunc
@@ -190,7 +190,7 @@ func NewWsEndPointMcpClient(ctx context.Context, deviceID string, conn *websocke
 		cancel:     cancel,
 		initState:  uint32(mcpClientInitStateReady),
 	}
-	wsEndPointMcp.storeToolsSnapshot(make(map[string]tool.InvokableTool))
+	wsEndPointMcp.storeToolsSnapshot(make(map[string]llm.InvokableTool))
 	wsEndPointMcp.setConnected(true)
 	wsEndPointMcp.setLastPing(time.Now())
 	mcpClient.OnNotification(wsEndPointMcp.handleJSONRPCNotification)
@@ -222,7 +222,7 @@ func NewIotOverMcpClient(deviceID string, transportType string, conn ConnInterfa
 		iotTransport: iotTransport,
 		initState:    uint32(mcpClientInitStateInitializing),
 	}
-	iotOverMcp.storeToolsSnapshot(make(map[string]tool.InvokableTool))
+	iotOverMcp.storeToolsSnapshot(make(map[string]llm.InvokableTool))
 	iotOverMcp.setConnected(true)
 	iotOverMcp.setLastPing(time.Now())
 	iotTransport.SetNotificationHandler(iotOverMcp.handleJSONRPCNotification)
@@ -250,12 +250,12 @@ func (dc *McpClientInstance) refreshTools() error {
 	return err
 }
 
-func (dc *McpClientInstance) refreshToolsStrict() (map[string]tool.InvokableTool, error) {
+func (dc *McpClientInstance) refreshToolsStrict() (map[string]llm.InvokableTool, error) {
 	return dc.refreshToolsWithPolicy(true)
 }
 
-func (dc *McpClientInstance) refreshToolsWithPolicy(clearOnFailure bool) (map[string]tool.InvokableTool, error) {
-	emptyTools := make(map[string]tool.InvokableTool)
+func (dc *McpClientInstance) refreshToolsWithPolicy(clearOnFailure bool) (map[string]llm.InvokableTool, error) {
+	emptyTools := make(map[string]llm.InvokableTool)
 	if dc == nil || dc.mcpClient == nil {
 		err := fmt.Errorf("mcp client未初始化")
 		if clearOnFailure {
@@ -301,12 +301,12 @@ func (dc *McpClientInstance) IsInitialized() bool {
 	return dc != nil && dc.serverInfo != nil
 }
 
-func (dc *McpClientInstance) storeToolsSnapshot(tools map[string]tool.InvokableTool) {
+func (dc *McpClientInstance) storeToolsSnapshot(tools map[string]llm.InvokableTool) {
 	if dc == nil {
 		return
 	}
 	if tools == nil {
-		tools = make(map[string]tool.InvokableTool)
+		tools = make(map[string]llm.InvokableTool)
 	}
 	dc.tools = tools
 	dc.toolsState.Store(tools)
@@ -316,23 +316,23 @@ func (dc *McpClientInstance) clearToolsSnapshot() {
 	if dc == nil {
 		return
 	}
-	dc.storeToolsSnapshot(make(map[string]tool.InvokableTool))
+	dc.storeToolsSnapshot(make(map[string]llm.InvokableTool))
 	dc.setLastToolsRefresh(time.Time{})
 }
 
-func (dc *McpClientInstance) loadToolsSnapshot() map[string]tool.InvokableTool {
+func (dc *McpClientInstance) loadToolsSnapshot() map[string]llm.InvokableTool {
 	if dc == nil {
 		return nil
 	}
 	if snapshot := dc.toolsState.Load(); snapshot != nil {
-		if tools, ok := snapshot.(map[string]tool.InvokableTool); ok {
+		if tools, ok := snapshot.(map[string]llm.InvokableTool); ok {
 			return tools
 		}
 	}
 	return dc.tools
 }
 
-func (dc *McpClientInstance) copyToolsInto(dst map[string]tool.InvokableTool) {
+func (dc *McpClientInstance) copyToolsInto(dst map[string]llm.InvokableTool) {
 	if dc == nil {
 		return
 	}
@@ -345,7 +345,7 @@ func (dc *McpClientInstance) toolCount() int {
 	return len(dc.loadToolsSnapshot())
 }
 
-func (dc *McpClientInstance) getToolByName(toolName string) (tool.InvokableTool, bool) {
+func (dc *McpClientInstance) getToolByName(toolName string) (llm.InvokableTool, bool) {
 	tools := dc.loadToolsSnapshot()
 	return findInvokableToolByName(tools, toolName)
 }
@@ -765,8 +765,8 @@ func (dc *McpClientInstance) RawCallTool(ctx context.Context, toolName string, a
 }
 
 // GetTools 获取工具列表
-func (dc *DeviceMcpSession) GetTools() map[string]tool.InvokableTool {
-	tools := make(map[string]tool.InvokableTool)
+func (dc *DeviceMcpSession) GetTools() map[string]llm.InvokableTool {
+	tools := make(map[string]llm.InvokableTool)
 	for _, mcpInstance := range dc.snapshotWsEndpointClients() {
 		mcpInstance.copyToolsInto(tools)
 	}
@@ -777,23 +777,23 @@ func (dc *DeviceMcpSession) GetTools() map[string]tool.InvokableTool {
 	return tools
 }
 
-func (dc *DeviceMcpSession) GetWsEndpointMcpTools() map[string]tool.InvokableTool {
-	tools := make(map[string]tool.InvokableTool)
+func (dc *DeviceMcpSession) GetWsEndpointMcpTools() map[string]llm.InvokableTool {
+	tools := make(map[string]llm.InvokableTool)
 	for _, mcpInstance := range dc.snapshotWsEndpointClients() {
 		mcpInstance.copyToolsInto(tools)
 	}
 	return tools
 }
 
-func (dc *DeviceMcpSession) RefreshWsEndpointTools() (map[string]tool.InvokableTool, error) {
-	tools := make(map[string]tool.InvokableTool)
+func (dc *DeviceMcpSession) RefreshWsEndpointTools() (map[string]llm.InvokableTool, error) {
+	tools := make(map[string]llm.InvokableTool)
 	for _, mcpInstance := range dc.snapshotWsEndpointClients() {
 		refreshedTools, err := mcpInstance.refreshToolsStrict()
 		if err != nil {
 			for _, cleanupTarget := range dc.snapshotWsEndpointClients() {
 				cleanupTarget.clearToolsSnapshot()
 			}
-			return map[string]tool.InvokableTool{}, err
+			return map[string]llm.InvokableTool{}, err
 		}
 		for name, invokable := range refreshedTools {
 			tools[name] = invokable
@@ -858,9 +858,9 @@ func (dc *DeviceMcpSession) GetPreferredIotTransportType() string {
 	return selectPreferred(false)
 }
 
-func (dc *DeviceMcpSession) GetIotToolsByTransport(transportType string) map[string]tool.InvokableTool {
+func (dc *DeviceMcpSession) GetIotToolsByTransport(transportType string) map[string]llm.InvokableTool {
 	transportType = strings.TrimSpace(transportType)
-	tools := make(map[string]tool.InvokableTool)
+	tools := make(map[string]llm.InvokableTool)
 	if transportType == "" {
 		return tools
 	}
@@ -877,9 +877,9 @@ func (dc *DeviceMcpSession) GetIotToolsByTransport(transportType string) map[str
 	return tools
 }
 
-func (dc *DeviceMcpSession) RefreshIotToolsByTransport(transportType string) (map[string]tool.InvokableTool, error) {
+func (dc *DeviceMcpSession) RefreshIotToolsByTransport(transportType string) (map[string]llm.InvokableTool, error) {
 	transportType = normalizeDeviceTransportType(transportType)
-	tools := make(map[string]tool.InvokableTool)
+	tools := make(map[string]llm.InvokableTool)
 	if transportType == "unknown" {
 		return tools, nil
 	}
@@ -894,7 +894,7 @@ func (dc *DeviceMcpSession) RefreshIotToolsByTransport(transportType string) (ma
 	return iotClient.refreshToolsStrict()
 }
 
-func (dc *DeviceMcpSession) GetIotToolByTransportAndName(transportType, toolName string) (tool.InvokableTool, bool) {
+func (dc *DeviceMcpSession) GetIotToolByTransportAndName(transportType, toolName string) (llm.InvokableTool, bool) {
 	transportType = strings.TrimSpace(transportType)
 	if transportType == "" {
 		return nil, false
@@ -950,7 +950,7 @@ func (dc *DeviceMcpSession) RawCallWsEndpointTool(ctx context.Context, toolName 
 	return result, true, err
 }
 
-func (dc *DeviceMcpSession) GetToolByName(toolName string) (tool tool.InvokableTool, ok bool) {
+func (dc *DeviceMcpSession) GetToolByName(toolName string) (tool llm.InvokableTool, ok bool) {
 	for _, mcpInstance := range dc.snapshotWsEndpointClients() {
 		if tool, ok = mcpInstance.getToolByName(toolName); ok {
 			return tool, true

@@ -3,13 +3,11 @@ package mcp
 import (
 	"fmt"
 	"sync"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
 	"github.com/bytedance/sonic"
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
-	"github.com/getkin/kin-openapi/openapi3"
 
 	mcp_protocol "github.com/ThinkInAIXYZ/go-mcp/protocol"
 )
@@ -70,7 +68,7 @@ func (l *LocalMCPManager) RegisterTool(tool *McpTool) error {
 	return nil
 }
 
-func (l *LocalMCPManager) convertStructToOpenaipi3Schema(inputParams any) (*openapi3.Schema, error) {
+func (l *LocalMCPManager) convertStructToOpenaipi3Schema(inputParams any) (map[string]any, error) {
 	//使用github.com/ThinkInAIXYZ/go-mcp 通过struct生成 tool, 然后转换成openapi3.Schema
 	toolInstance, err := mcp_protocol.NewTool("get_system_info", "获取系统基本信息", inputParams)
 	if err != nil {
@@ -82,8 +80,8 @@ func (l *LocalMCPManager) convertStructToOpenaipi3Schema(inputParams any) (*open
 		return nil, err
 	}
 
-	inputSchema := &openapi3.Schema{}
-	err = sonic.Unmarshal(marshaledInputSchema, inputSchema)
+	inputSchema := map[string]any{}
+	err = sonic.Unmarshal(marshaledInputSchema, &inputSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -98,10 +96,10 @@ func (l *LocalMCPManager) RegisterToolFunc(name, description string, inputParams
 		return err
 	}
 	tool := &McpTool{
-		info: &schema.ToolInfo{
-			Name:        name,
-			Desc:        description,
-			ParamsOneOf: schema.NewParamsOneOfByOpenAPIV3(inputSchema),
+		info: &llm.Tool{
+			Name:   name,
+			Desc:   description,
+			Params: inputSchema,
 		},
 		isLocal:      true,
 		localHandler: handler,
@@ -124,11 +122,11 @@ func (l *LocalMCPManager) UnregisterTool(name string) error {
 }
 
 // GetAllTools 获取所有本地工具，返回Eino工具接口格式
-func (l *LocalMCPManager) GetAllTools() map[string]tool.InvokableTool {
+func (l *LocalMCPManager) GetAllTools() map[string]llm.InvokableTool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	result := make(map[string]tool.InvokableTool)
+	result := make(map[string]llm.InvokableTool)
 	for name, mcpTool := range l.tools {
 		result[name] = mcpTool
 	}
@@ -136,7 +134,7 @@ func (l *LocalMCPManager) GetAllTools() map[string]tool.InvokableTool {
 }
 
 // GetToolByName 根据名称获取工具
-func (l *LocalMCPManager) GetToolByName(name string) (tool.InvokableTool, bool) {
+func (l *LocalMCPManager) GetToolByName(name string) (llm.InvokableTool, bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 

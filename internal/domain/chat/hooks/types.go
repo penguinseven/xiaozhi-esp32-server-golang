@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/speaker"
 )
 
@@ -121,15 +121,15 @@ type ASROutputData struct {
 }
 
 type LLMInputData struct {
-	UserMessage     *schema.Message
-	RequestMessages []*schema.Message
-	Tools           []*schema.ToolInfo
+	UserMessage     *llm.Message
+	RequestMessages []*llm.Message
+	Tools           []*llm.Tool
 }
 
 type LLMOutputRawData struct {
 	Delta     string
 	FullText  string
-	ToolCalls []schema.ToolCall
+	ToolCalls []llm.ToolCall
 	IsEnd     bool
 	Err       error
 }

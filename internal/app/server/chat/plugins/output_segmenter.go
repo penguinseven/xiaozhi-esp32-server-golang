@@ -3,8 +3,8 @@ package plugins
 import (
 	"strings"
 
-	"github.com/cloudwego/eino/schema"
 	"xiaozhi-esp32-server-golang/internal/domain/chat/streamtransform"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/pkg/text"
 	"xiaozhi-esp32-server-golang/internal/util"
 )
@@ -34,7 +34,7 @@ func (f outputSegmenterFactory) New(ctx streamtransform.Context) (streamtransfor
 
 type outputSegmenterTransformer struct {
 	textBuffer       strings.Builder
-	pendingToolCalls []schema.ToolCall
+	pendingToolCalls []llm.ToolCall
 	minLen           int
 	maxLen           int
 	isFirst          bool
@@ -154,7 +154,7 @@ func (t *outputSegmenterTransformer) flushPendingToolCalls(meta map[string]any, 
 		return nil
 	}
 
-	toolCalls := append([]schema.ToolCall(nil), t.pendingToolCalls...)
+	toolCalls := append([]llm.ToolCall(nil), t.pendingToolCalls...)
 	t.pendingToolCalls = nil
 	return []streamtransform.Item{{
 		Kind:      streamtransform.ItemKindToolCalls,

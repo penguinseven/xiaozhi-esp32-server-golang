@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -25,7 +24,7 @@ type LocalToolHandler func(ctx context.Context, argumentsInJSON string) (string,
 
 // mcpTool MCP工具实现，支持远程和本地工具
 type McpTool struct {
-	info       *schema.ToolInfo
+	info       *llm.Tool
 	originName string
 	serverName string
 	client     *client.Client
@@ -36,7 +35,7 @@ type McpTool struct {
 }
 
 // Info 获取工具信息，实现BaseTool接口
-func (t *McpTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
+func (t *McpTool) Info(ctx context.Context) (*llm.Tool, error) {
 	return t.info, nil
 }
 
@@ -50,7 +49,7 @@ func (t *McpTool) callName() string {
 	return ""
 }
 
-func mcpToolMatchesName(invokable tool.InvokableTool, name string) bool {
+func mcpToolMatchesName(invokable llm.InvokableTool, name string) bool {
 	mcpTool, ok := invokable.(*McpTool)
 	if !ok || mcpTool == nil {
 		return false
@@ -61,7 +60,7 @@ func mcpToolMatchesName(invokable tool.InvokableTool, name string) bool {
 	return mcpTool.originName != "" && mcpTool.originName == name
 }
 
-func findInvokableToolByName(tools map[string]tool.InvokableTool, name string) (tool.InvokableTool, bool) {
+func findInvokableToolByName(tools map[string]llm.InvokableTool, name string) (llm.InvokableTool, bool) {
 	if invokable, ok := tools[name]; ok {
 		return invokable, true
 	}
@@ -73,7 +72,7 @@ func findInvokableToolByName(tools map[string]tool.InvokableTool, name string) (
 	return nil, false
 }
 
-func remoteCallNameForTool(invokable tool.InvokableTool, fallback string) string {
+func remoteCallNameForTool(invokable llm.InvokableTool, fallback string) string {
 	if mcpTool, ok := invokable.(*McpTool); ok && mcpTool != nil {
 		if name := mcpTool.callName(); name != "" {
 			return name
@@ -82,7 +81,7 @@ func remoteCallNameForTool(invokable tool.InvokableTool, fallback string) string
 	return fallback
 }
 
-func (t *McpTool) InvokeableLocalRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
+func (t *McpTool) InvokeableLocalRun(ctx context.Context, argumentsInJSON string) (string, error) {
 	toolInfo := t.info
 	if t.localHandler == nil {
 		return "", fmt.Errorf("本地工具 %s 的处理函数未定义", toolInfo.Name)
@@ -105,10 +104,10 @@ func (t *McpTool) InvokeableLocalRun(ctx context.Context, argumentsInJSON string
 }
 
 // InvokableRun 调用工具，实现InvokableTool接口
-func (t *McpTool) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
+func (t *McpTool) InvokableRun(ctx context.Context, argumentsInJSON string) (string, error) {
 	// 如果是本地工具，直接调用本地处理函数
 	if t.isLocal {
-		return t.InvokeableLocalRun(ctx, argumentsInJSON, opts...)
+		return t.InvokeableLocalRun(ctx, argumentsInJSON)
 	}
 
 	retContent := ""

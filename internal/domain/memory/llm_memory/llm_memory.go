@@ -8,9 +8,9 @@ import (
 	"time"
 
 	i_redis "xiaozhi-esp32-server-golang/internal/db/redis"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 
 	"github.com/redis/go-redis/v9"
@@ -157,7 +157,7 @@ func (m *Memory) getSystemPromptKey(deviceID string) string {
 }
 
 // AddMessage 添加一条新的对话消息到记忆体
-func (m *Memory) AddMessage(ctx context.Context, deviceID string, agentID string, msg schema.Message) error {
+func (m *Memory) AddMessage(ctx context.Context, deviceID string, agentID string, msg llm.Message) error {
 	if m.redisClient == nil {
 		log.Log().Warn("redis client is nil")
 		return nil
@@ -182,10 +182,10 @@ func (m *Memory) AddMessage(ctx context.Context, deviceID string, agentID string
 }
 
 // GetMessages 获取设备的所有对话记忆
-func (m *Memory) GetMessages(ctx context.Context, deviceID string, agentID string, count int) ([]*schema.Message, error) {
+func (m *Memory) GetMessages(ctx context.Context, deviceID string, agentID string, count int) ([]*llm.Message, error) {
 	if m.redisClient == nil {
 		log.Log().Warn("redis client is nil")
-		return []*schema.Message{}, nil
+		return []*llm.Message{}, nil
 	}
 
 	key := m.getMemoryKey(deviceID)
@@ -203,10 +203,10 @@ func (m *Memory) GetMessages(ctx context.Context, deviceID string, agentID strin
 	}
 
 	// 预分配切片
-	messages := make([]*schema.Message, 0)
+	messages := make([]*llm.Message, 0)
 
 	for i := 0; i < len(results); i++ {
-		msg := schema.Message{}
+		msg := llm.Message{}
 		if err := json.Unmarshal([]byte(results[i]), &msg); err != nil {
 			return nil, fmt.Errorf("unmarshal message failed: %w", err)
 		}
@@ -218,10 +218,10 @@ func (m *Memory) GetMessages(ctx context.Context, deviceID string, agentID strin
 }
 
 // GetMessagesForLLM 获取适用于 LLM 的消息格式
-func (m *Memory) GetMessagesForLLM(ctx context.Context, deviceID string, count int) ([]*schema.Message, error) {
+func (m *Memory) GetMessagesForLLM(ctx context.Context, deviceID string, count int) ([]*llm.Message, error) {
 	if m.redisClient == nil {
 		log.Log().Warn("redis client is nil")
-		return []*schema.Message{}, nil
+		return []*llm.Message{}, nil
 	}
 
 	// 获取历史消息（已经是按时间顺序：旧->新）
@@ -245,24 +245,24 @@ func (m *Memory) SetSystemPrompt(ctx context.Context, deviceID string, prompt st
 }
 
 // GetSystemPrompt 获取设备的系统 prompt
-func (m *Memory) GetSystemPrompt(ctx context.Context, deviceID string) (schema.Message, error) {
+func (m *Memory) GetSystemPrompt(ctx context.Context, deviceID string) (llm.Message, error) {
 	if m.redisClient == nil {
 		log.Log().Warn("redis client is nil")
-		return schema.Message{Role: schema.System, Content: viper.GetString("system_prompt")}, nil
+		return llm.Message{Role: llm.RoleSystem, Content: viper.GetString("system_prompt")}, nil
 	}
 
 	key := m.getSystemPromptKey(deviceID)
 
 	result, err := m.redisClient.Get(ctx, key).Result()
 	if err == redis.Nil {
-		return schema.Message{}, nil // 返回空消息结构
+		return llm.Message{}, nil // 返回空消息结构
 	}
 	if err != nil {
-		return schema.Message{}, fmt.Errorf("get system prompt failed: %w", err)
+		return llm.Message{}, fmt.Errorf("get system prompt failed: %w", err)
 	}
 
-	return schema.Message{
-		Role:    schema.System,
+	return llm.Message{
+		Role:    llm.RoleSystem,
 		Content: result,
 	}, nil
 }
@@ -284,10 +284,10 @@ func (m *Memory) ResetMemory(ctx context.Context, deviceID string) error {
 }
 
 // GetLastNMessages 获取最近的 N 条消息
-func (m *Memory) GetLastNMessages(ctx context.Context, deviceID string, n int64) ([]schema.Message, error) {
+func (m *Memory) GetLastNMessages(ctx context.Context, deviceID string, n int64) ([]llm.Message, error) {
 	if m.redisClient == nil {
 		log.Log().Warn("redis client is nil")
-		return []schema.Message{}, nil
+		return []llm.Message{}, nil
 	}
 
 	key := m.getMemoryKey(deviceID)
@@ -298,9 +298,9 @@ func (m *Memory) GetLastNMessages(ctx context.Context, deviceID string, n int64)
 		return nil, fmt.Errorf("get last messages failed: %w", err)
 	}
 
-	messages := make([]schema.Message, 0, len(results))
+	messages := make([]llm.Message, 0, len(results))
 	for i := len(results) - 1; i >= 0; i-- { // 反转顺序以保持时间顺序
-		var msg schema.Message
+		var msg llm.Message
 		if err := json.Unmarshal([]byte(results[i]), &msg); err != nil {
 			return nil, fmt.Errorf("unmarshal message failed: %w", err)
 		}
@@ -334,7 +334,7 @@ func (m *Memory) SetSummary(ctx context.Context, deviceID string, summary string
 }
 
 // 进行总结
-func (m *Memory) Summary(ctx context.Context, deviceID string, msgList []schema.Message) (string, error) {
+func (m *Memory) Summary(ctx context.Context, deviceID string, msgList []llm.Message) (string, error) {
 	return "", nil
 }
 

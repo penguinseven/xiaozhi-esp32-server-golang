@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"xiaozhi-esp32-server-golang/internal/domain/llm"
+	"xiaozhi-esp32-server-golang/internal/domain/llm/factory"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
@@ -19,7 +19,7 @@ func HandleVllm(deviceId string, file []byte, text string) (string, error) {
 
 	mimeType := http.DetectContentType(file[:512])
 
-	llmProvider, err := llm.GetLLMProvider(provider, vllmConfig)
+	llmProvider, err := factory.GetLLMProvider(provider, vllmConfig)
 	if err != nil {
 		log.Errorf("获取VLLM Provider失败: %v", err)
 		return "", err

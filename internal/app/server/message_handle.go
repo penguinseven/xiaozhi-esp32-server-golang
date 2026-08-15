@@ -12,11 +12,11 @@ import (
 	data_client "xiaozhi-esp32-server-golang/internal/data/client"
 	"xiaozhi-esp32-server-golang/internal/data/history"
 	"xiaozhi-esp32-server-golang/internal/domain/eventbus"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/memory/llm_memory"
-	"xiaozhi-esp32-server-golang/internal/util"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	"xiaozhi-esp32-server-golang/internal/util"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 )
 
@@ -227,13 +227,13 @@ func (w *MessageWorker) saveMessageText(ctx context.Context, event *eventbus.Add
 	// 确定消息角色
 	var role history.MessageType
 	switch event.Msg.Role {
-	case schema.User:
+	case llm.RoleUser:
 		role = history.MessageTypeUser
-	case schema.Assistant:
+	case llm.RoleAssistant:
 		role = history.MessageTypeAssistant
-	case schema.Tool:
+	case llm.RoleTool:
 		role = history.MessageTypeTool
-	case schema.System:
+	case llm.RoleSystem:
 		role = history.MessageTypeSystem
 	default:
 		log.Warnf("不支持的消息角色: %s", event.Msg.Role)
@@ -251,7 +251,7 @@ func (w *MessageWorker) saveMessageText(ctx context.Context, event *eventbus.Add
 		var err error
 
 		// 根据消息角色选择不同的音频转换方法
-		if event.Msg.Role == schema.User {
+		if event.Msg.Role == llm.RoleUser {
 			// User 消息（ASR）：PCM float32 格式
 			if len(event.AudioData) > 0 {
 				wavData, err = util.PCMFloat32BytesToWav(
@@ -295,12 +295,12 @@ func (w *MessageWorker) saveMessageText(ctx context.Context, event *eventbus.Add
 	var toolCallsJSON *string
 
 	// Tool 角色：保存 tool_call_id
-	if event.Msg.Role == schema.Tool && event.Msg.ToolCallID != "" {
+	if event.Msg.Role == llm.RoleTool && event.Msg.ToolCallID != "" {
 		toolCallID = event.Msg.ToolCallID
 	}
 
 	// Assistant 角色：保存 ToolCalls（如果有）
-	if event.Msg.Role == schema.Assistant && len(event.Msg.ToolCalls) > 0 {
+	if event.Msg.Role == llm.RoleAssistant && len(event.Msg.ToolCalls) > 0 {
 		// 序列化 ToolCalls 为 JSON 字符串
 		toolCallsBytes, err := json.Marshal(event.Msg.ToolCalls)
 		if err != nil {
@@ -346,7 +346,7 @@ func (w *MessageWorker) updateMessageAudio(ctx context.Context, event *eventbus.
 		// 根据消息角色选择不同的音频转换方法
 		// User 消息（ASR）：PCM float32 格式，使用 PCMFloat32BytesToWav
 		// Assistant 消息（TTS）：Opus 格式，使用 OpusFramesToWav
-		if event.Msg.Role == schema.User {
+		if event.Msg.Role == llm.RoleUser {
 			// User 消息：PCM float32 格式
 			// event.AudioData 是 [][]byte，但 User 消息只有一个元素（完整的 PCM float32 字节数组）
 			if len(event.AudioData) > 0 {

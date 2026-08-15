@@ -3,7 +3,7 @@ package streamtransform
 import (
 	"context"
 
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 type Context struct {
@@ -24,7 +24,7 @@ const (
 type Item struct {
 	Kind      ItemKind
 	Text      string
-	ToolCalls []schema.ToolCall
+	ToolCalls []llm.ToolCall
 	IsEnd     bool
 	Meta      map[string]any
 }

@@ -3,7 +3,7 @@ package nomemo
 import (
 	"context"
 
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 // NoMemoProvider 空的记忆提供者实现
@@ -16,15 +16,15 @@ func Get() *NoMemoProvider {
 }
 
 // AddMessage 添加一条消息到记忆（空实现）
-func (n *NoMemoProvider) AddMessage(ctx context.Context, agentID string, msg schema.Message) error {
+func (n *NoMemoProvider) AddMessage(ctx context.Context, agentID string, msg llm.Message) error {
 	// 空实现，不执行任何操作
 	return nil
 }
 
 // GetMessages 获取用户的历史消息（空实现）
-func (n *NoMemoProvider) GetMessages(ctx context.Context, agentId string, count int) ([]*schema.Message, error) {
+func (n *NoMemoProvider) GetMessages(ctx context.Context, agentId string, count int) ([]*llm.Message, error) {
 	// 返回空的消息列表
-	return []*schema.Message{}, nil
+	return []*llm.Message{}, nil
 }
 
 // GetContext 获取用户的上下文信息（空实现）

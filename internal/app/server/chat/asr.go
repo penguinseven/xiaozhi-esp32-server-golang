@@ -15,12 +15,12 @@ import (
 	asr_types "xiaozhi-esp32-server-golang/internal/domain/asr/types"
 	"xiaozhi-esp32-server-golang/internal/domain/audio"
 	chathooks "xiaozhi-esp32-server-golang/internal/domain/chat/hooks"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/speaker"
 	"xiaozhi-esp32-server-golang/internal/domain/vad/inter"
-	"xiaozhi-esp32-server-golang/internal/pool"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	"xiaozhi-esp32-server-golang/internal/pool"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 )
 
@@ -29,7 +29,7 @@ type ASRManagerOption func(*ASRManager)
 const maxFirstSpeechPreAudioMs = 200
 
 // AsrMessageSaveCallback 消息保存回调函数类型
-type AsrMessageSaveCallback func(userMsg *schema.Message, messageID string, audioData []float32)
+type AsrMessageSaveCallback func(userMsg *llm.Message, messageID string, audioData []float32)
 
 type ASRManager struct {
 	clientState     *ClientState
@@ -864,8 +864,8 @@ func (a *ASRManager) StartAsrRecognitionLoop(
 				}
 
 				// 创建用户消息，使用 hook 改写后的文本进入后续副作用链
-				userMsg := &schema.Message{
-					Role:    schema.User,
+				userMsg := &llm.Message{
+					Role:    llm.RoleUser,
 					Content: text,
 				}
 

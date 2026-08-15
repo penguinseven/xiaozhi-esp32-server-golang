@@ -7,11 +7,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 
 	"github.com/bytedance/sonic"
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -43,7 +41,7 @@ type MCPServerConfig struct {
 // GlobalMCPManager 全局MCP管理器
 type GlobalMCPManager struct {
 	servers       map[string]*MCPServerConnection
-	tools         map[string]tool.InvokableTool
+	tools         map[string]llm.InvokableTool
 	mu            sync.RWMutex
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -61,7 +59,7 @@ type ReconnectConfig struct {
 type MCPServerConnection struct {
 	config        MCPServerConfig
 	client        *client.Client
-	tools         map[string]tool.InvokableTool
+	tools         map[string]llm.InvokableTool
 	connected     bool
 	refreshing    bool
 	refreshQueued bool
@@ -86,7 +84,7 @@ func GetGlobalMCPManager() *GlobalMCPManager {
 		ctx, cancel := context.WithCancel(context.Background())
 		globalManager = &GlobalMCPManager{
 			servers: make(map[string]*MCPServerConnection),
-			tools:   make(map[string]tool.InvokableTool),
+			tools:   make(map[string]llm.InvokableTool),
 			ctx:     ctx,
 			cancel:  cancel,
 			reconnectConf: ReconnectConfig{
@@ -173,7 +171,7 @@ func (g *GlobalMCPManager) Stop() error {
 		}
 	}
 	g.servers = make(map[string]*MCPServerConnection)
-	g.tools = make(map[string]tool.InvokableTool)
+	g.tools = make(map[string]llm.InvokableTool)
 	g.mu.Unlock()
 
 	for _, server := range servers {
@@ -190,7 +188,7 @@ func (g *GlobalMCPManager) Stop() error {
 func (g *GlobalMCPManager) createFailedConnection(config MCPServerConfig) {
 	conn := &MCPServerConnection{
 		config:     config,
-		tools:      make(map[string]tool.InvokableTool),
+		tools:      make(map[string]llm.InvokableTool),
 		connected:  false,
 		lastError:  fmt.Errorf("初始化连接失败"),
 		retryCount: 0,
@@ -223,7 +221,7 @@ func (g *GlobalMCPManager) connectToServer(config MCPServerConfig) error {
 
 	conn := &MCPServerConnection{
 		config: config,
-		tools:  make(map[string]tool.InvokableTool),
+		tools:  make(map[string]llm.InvokableTool),
 	}
 
 	g.mu.Lock()
@@ -262,7 +260,7 @@ func (conn *MCPServerConnection) connect() (retErr error) {
 		conn.connected = false
 		conn.refreshing = false
 		conn.refreshQueued = false
-		conn.tools = make(map[string]tool.InvokableTool)
+		conn.tools = make(map[string]llm.InvokableTool)
 		conn.lastError = retErr
 		conn.mu.Unlock()
 
@@ -538,8 +536,8 @@ func (conn *MCPServerConnection) refreshTools(ctx context.Context) error {
 	return nil
 }
 
-func ConvertMcpToolListToInvokableToolList(tools []mcp.Tool, serverName string, client *client.Client) map[string]tool.InvokableTool {
-	invokeTools := make(map[string]tool.InvokableTool)
+func ConvertMcpToolListToInvokableToolList(tools []mcp.Tool, serverName string, client *client.Client) map[string]llm.InvokableTool {
+	invokeTools := make(map[string]llm.InvokableTool)
 	usedNames := make(map[string]string, len(tools))
 	for _, tool := range tools {
 		originName := tool.Name
@@ -557,18 +555,18 @@ func ConvertMcpToolListToInvokableToolList(tools []mcp.Tool, serverName string, 
 			log.Errorf("convert mcp tool to invokeable tool err: %+v", err)
 			continue
 		}
-		inputSchema := &openapi3.Schema{}
-		err = sonic.Unmarshal(marshaledInputSchema, inputSchema)
+		inputSchema := map[string]any{}
+		err = sonic.Unmarshal(marshaledInputSchema, &inputSchema)
 		if err != nil {
 			log.Errorf("convert mcp tool to invokeable tool err: %+v", err)
 			continue
 		}
 
 		mcpToolInstance := &McpTool{
-			info: &schema.ToolInfo{
-				Name:        llmName,
-				Desc:        tool.Description,
-				ParamsOneOf: schema.NewParamsOneOfByOpenAPIV3(inputSchema),
+			info: &llm.Tool{
+				Name:   llmName,
+				Desc:   tool.Description,
+				Params: inputSchema,
 			},
 			originName: originName,
 			serverName: serverName,
@@ -586,7 +584,7 @@ func (conn *MCPServerConnection) disconnect() error {
 	mcpClient := conn.client
 	conn.client = nil
 	conn.connected = false
-	conn.tools = make(map[string]tool.InvokableTool)
+	conn.tools = make(map[string]llm.InvokableTool)
 	conn.mu.Unlock()
 
 	if globalManager != nil {
@@ -615,7 +613,7 @@ func (g *GlobalMCPManager) removeGlobalTools(serverName string) {
 }
 
 // updateGlobalTools 更新全局工具列表
-func (g *GlobalMCPManager) updateGlobalTools(serverName string, tools map[string]tool.InvokableTool) {
+func (g *GlobalMCPManager) updateGlobalTools(serverName string, tools map[string]llm.InvokableTool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -633,11 +631,11 @@ func (g *GlobalMCPManager) updateGlobalTools(serverName string, tools map[string
 }
 
 // GetAllTools 获取所有可用工具
-func (g *GlobalMCPManager) GetAllTools() map[string]tool.InvokableTool {
+func (g *GlobalMCPManager) GetAllTools() map[string]llm.InvokableTool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
-	result := make(map[string]tool.InvokableTool)
+	result := make(map[string]llm.InvokableTool)
 	for name, mcpToolInterface := range g.tools {
 		result[name] = mcpToolInterface
 	}
@@ -645,7 +643,7 @@ func (g *GlobalMCPManager) GetAllTools() map[string]tool.InvokableTool {
 }
 
 // GetToolByName 根据名称获取工具
-func (g *GlobalMCPManager) GetToolByName(name string) (tool.InvokableTool, bool) {
+func (g *GlobalMCPManager) GetToolByName(name string) (llm.InvokableTool, bool) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
@@ -653,7 +651,7 @@ func (g *GlobalMCPManager) GetToolByName(name string) (tool.InvokableTool, bool)
 		return invokable, true
 	}
 
-	var matched tool.InvokableTool
+	var matched llm.InvokableTool
 	matchCount := 0
 	for _, invokable := range g.tools {
 		if !mcpToolMatchesName(invokable, name) {
