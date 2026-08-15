@@ -54,10 +54,19 @@ func GetGlobalResourcePoolManager() *UniversalResourcePoolManager {
 type ResourceTypeOption[T any] func(*ResourceTypeConfig[T])
 
 // ResourceTypeConfig 资源类型配置（泛型：回调直接使用资源类型 T，无需 interface{} 断言）
+
+// ResourceTypeConfig 资源类型配置（泛型：回调直接使用资源类型 T，无需 interface{} 断言）
 type ResourceTypeConfig[T any] struct {
 	CloseFunc   func(T) error
 	IsValidFunc func(T) bool
 	ResetFunc   func(T) error
+}
+
+// Lifecycle 资源生命周期接口（聚合 Close/IsValid/Reset）
+type Lifecycle[T any] interface {
+	Close(T) error
+	IsValid(T) bool
+	Reset(T) error
 }
 
 // WithCloseFunc 设置关闭函数
@@ -78,6 +87,15 @@ func WithIsValidFunc[T any](fn func(T) bool) ResourceTypeOption[T] {
 func WithResetFunc[T any](fn func(T) error) ResourceTypeOption[T] {
 	return func(c *ResourceTypeConfig[T]) {
 		c.ResetFunc = fn
+	}
+}
+
+// WithLifecycle 通过 Lifecycle 接口一次性设置 Close/IsValid/Reset
+func WithLifecycle[T any](lc Lifecycle[T]) ResourceTypeOption[T] {
+	return func(c *ResourceTypeConfig[T]) {
+		c.CloseFunc = lc.Close
+		c.IsValidFunc = lc.IsValid
+		c.ResetFunc = lc.Reset
 	}
 }
 

@@ -1,3 +1,5 @@
+//go:build cgo && ten_vad
+
 package ten_vad
 
 import (

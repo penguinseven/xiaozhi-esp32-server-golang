@@ -1,55 +1,35 @@
 package audio
 
 import (
-	"errors"
-
-	"gopkg.in/hraban/opus.v2"
+	"xiaozhi-esp32-server-golang/internal/domain/audio/codec"
 )
 
+// AudioProcesser 音频处理器（适配 codec.FrameConverter）
 type AudioProcesser struct {
-	sampleRate       int
-	channels         int
-	perFrameDuration int
-	decoder          *opus.Decoder
-	encoder          *opus.Encoder
+	converter codec.FrameConverter
 }
 
+// GetAudioProcesser 创建音频处理器
 func GetAudioProcesser(sampleRate int, channels int, perFrameDuration int) (*AudioProcesser, error) {
-	decoder, err := opus.NewDecoder(sampleRate, channels)
+	conv, err := codec.New(codec.Config{
+		SampleRate:       sampleRate,
+		Channels:         channels,
+		PerFrameDuration: perFrameDuration,
+	})
 	if err != nil {
 		return nil, err
 	}
-	encoder, err := opus.NewEncoder(sampleRate, channels, opus.AppAudio)
-	if err != nil {
-		return nil, err
-	}
-
-	return &AudioProcesser{
-		sampleRate:       sampleRate,
-		channels:         channels,
-		perFrameDuration: perFrameDuration,
-		decoder:          decoder,
-		encoder:          encoder,
-	}, nil
+	return &AudioProcesser{converter: conv}, nil
 }
 
 func (a *AudioProcesser) Decoder(audio []byte, pcmData []int16) (int, error) {
-	if a.decoder == nil {
-		return 0, errors.New("decoder is nil")
-	}
-	return a.decoder.Decode(audio, pcmData)
+	return a.converter.Decode(audio, pcmData)
 }
 
 func (a *AudioProcesser) DecoderFloat32(audio []byte, pcmData []float32) (int, error) {
-	if a.decoder == nil {
-		return 0, errors.New("decoder is nil")
-	}
-	return a.decoder.DecodeFloat32(audio, pcmData)
+	return a.converter.DecodeFloat32(audio, pcmData)
 }
 
 func (a *AudioProcesser) Encoder(pcmData []int16, audio []byte) (int, error) {
-	if a.encoder == nil {
-		return 0, errors.New("encoder is nil")
-	}
-	return a.encoder.Encode(pcmData, audio)
+	return a.converter.Encode(pcmData, audio)
 }
