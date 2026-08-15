@@ -1,4 +1,4 @@
-//go:build cgo && ten_vad
+//go:build cgo
 
 package ten_vad
 
