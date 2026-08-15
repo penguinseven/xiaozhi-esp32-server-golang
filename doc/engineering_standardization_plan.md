@@ -77,6 +77,19 @@
 
    按 Clean Architecture，领域层应保持 100% 纯粹，不依赖任何第三方业务框架。Eino 是具体的 LLM 编排框架，属于**外层基础设施/适配器**（Infrastructure/Adapter）。
 
+1.5 **LLM eino 形状根因接缝**（已修复 #4）
+
+   根本问题：eino 的 `schema.Message`、`schema.ToolCall`、`schema.ToolInfo` 等"形状类型"作为领域类型流向消费端（`internal/app/`、`internal/data/`、`internal/pool/`、`internal/domain/memory/`、`internal/domain/mcp/` 等），导致整个代码库与 eino 框架耦合。真正的领域逻辑不应依赖具体框架的形状定义。
+
+   修复方案（#4 LLM 接缝领域化）：
+   - 在 `internal/domain/llm/types.go` 定义领域类型：`Message`、`MessageRole`、`ToolCall`、`ToolCallFunction`、`Tool`、`LLMResponse`、`InvokableTool`
+   - 收窄 `LLMProvider` 接口为 `ResponseWithContext(ctx, sessionID, msgs, tools) <-chan *Message`
+   - 在 `eino_llm/convert.go` 建立单向转换层（领域 ↔ eino），将 eino 形状限制在 `eino_llm/` 包内
+   - 消费端全部迁移至领域类型，不再直接引用 `eino/schema`
+
+   验证：`rg 'cloudwego/eino' --glob '*.go'` 仅剩 `eino_llm/` 4 个桥接文件。
+
+
 2. **CGo 编译屏障严重**
    CGo 集中在两处：
    - **Opus 音频编解码**：`internal/util/opus_repacketizer.go`（`#cgo pkg-config: opus`），Makefile 强制 `CGO_ENABLED=1`
