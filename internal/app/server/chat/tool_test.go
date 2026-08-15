@@ -3,14 +3,14 @@ package chat
 import (
 	"testing"
 
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 func TestNormalizeToolCallIDsFillsMissingIDs(t *testing.T) {
-	calls := []schema.ToolCall{
+	calls := []llm.ToolCall{
 		{
 			Type: "function",
-			Function: schema.FunctionCall{
+			Function: llm.ToolCallFunction{
 				Name:      "get_eth0_ip",
 				Arguments: `{}`,
 			},
@@ -18,7 +18,7 @@ func TestNormalizeToolCallIDsFillsMissingIDs(t *testing.T) {
 		{
 			ID:   "existing-id",
 			Type: "function",
-			Function: schema.FunctionCall{
+			Function: llm.ToolCallFunction{
 				Name:      "get_weather",
 				Arguments: `{"city":"Shanghai"}`,
 			},
@@ -35,19 +35,19 @@ func TestNormalizeToolCallIDsFillsMissingIDs(t *testing.T) {
 }
 
 func TestNormalizeToolCallIDsUsesStableFallbackForSameCall(t *testing.T) {
-	call := schema.ToolCall{
+	call := llm.ToolCall{
 		Type: "function",
-		Function: schema.FunctionCall{
+		Function: llm.ToolCallFunction{
 			Name:      "tell_joke",
 			Arguments: `{}`,
 		},
 	}
 
-	first := normalizeToolCallIDs([]schema.ToolCall{call})
-	second := normalizeToolCallIDs([]schema.ToolCall{
+	first := normalizeToolCallIDs([]llm.ToolCall{call})
+	second := normalizeToolCallIDs([]llm.ToolCall{
 		{
 			Type: "function",
-			Function: schema.FunctionCall{
+			Function: llm.ToolCallFunction{
 				Name:      "other_tool",
 				Arguments: `{"ignored":true}`,
 			},
@@ -64,15 +64,15 @@ func TestNormalizeToolCallIDsUsesStableFallbackForSameCall(t *testing.T) {
 }
 
 func TestEnsureToolCallIDMatchesNormalizeFallback(t *testing.T) {
-	call := schema.ToolCall{
+	call := llm.ToolCall{
 		Type: "function",
-		Function: schema.FunctionCall{
+		Function: llm.ToolCallFunction{
 			Name:      "tell_joke",
 			Arguments: `{}`,
 		},
 	}
 
-	normalized := normalizeToolCallIDs([]schema.ToolCall{call})
+	normalized := normalizeToolCallIDs([]llm.ToolCall{call})
 	executed := ensureToolCallID(call)
 	if executed.ID != normalized[0].ID {
 		t.Fatalf("expected executor and normalize paths to use same fallback id, got %q and %q", executed.ID, normalized[0].ID)

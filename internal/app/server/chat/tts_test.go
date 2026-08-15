@@ -10,7 +10,7 @@ import (
 	data_client "xiaozhi-esp32-server-golang/internal/data/client"
 	msgdata "xiaozhi-esp32-server-golang/internal/data/msg"
 	config_types "xiaozhi-esp32-server-golang/internal/domain/config/types"
-	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/play_music"
 )
 
@@ -22,7 +22,7 @@ func TestClearTTSQueueDismissesDrainedItemsForTurnBarrier(t *testing.T) {
 		t.Fatal("expected tracker to be stored in context")
 	}
 
-	if err := manager.handleTextResponseWithHooks(ctx, llm_common.LLMResponseStruct{Text: "你好"}, false, tracker.Add, nil); err != nil {
+	if err := manager.handleTextResponseWithHooks(ctx, llm.LLMResponse{Text: "你好"}, false, tracker.Add, nil); err != nil {
 		t.Fatalf("enqueue tts item failed: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestClearTTSQueueResetsDualStreamState(t *testing.T) {
 		t.Fatal("expected tracker to be stored in context")
 	}
 
-	if err := manager.handleTextResponseWithHooks(ctx, llm_common.LLMResponseStruct{
+	if err := manager.handleTextResponseWithHooks(ctx, llm.LLMResponse{
 		Text:    "第一段",
 		IsStart: true,
 	}, false, tracker.Add, nil); err != nil {
@@ -110,7 +110,7 @@ func TestHandleTextResponseWithCanceledContextSkipsEnqueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if err := manager.handleTextResponseWithHooks(ctx, llm_common.LLMResponseStruct{Text: "晚到分片"}, false, nil, nil); err != nil {
+	if err := manager.handleTextResponseWithHooks(ctx, llm.LLMResponse{Text: "晚到分片"}, false, nil, nil); err != nil {
 		t.Fatalf("handleTextResponseWithHooks returned error: %v", err)
 	}
 	if got := manager.ttsQueueSeq.Load(); got != 0 {
@@ -125,7 +125,7 @@ func TestDualStreamIgnoresFragmentsFromPreviousTurn(t *testing.T) {
 	secondCtx, secondCancel := context.WithCancel(context.Background())
 	defer secondCancel()
 
-	if err := manager.handleTextResponseWithHooks(firstCtx, llm_common.LLMResponseStruct{
+	if err := manager.handleTextResponseWithHooks(firstCtx, llm.LLMResponse{
 		Text:    "第一轮开头",
 		IsStart: true,
 	}, false, nil, nil); err != nil {
@@ -134,7 +134,7 @@ func TestDualStreamIgnoresFragmentsFromPreviousTurn(t *testing.T) {
 
 	manager.ClearTTSQueue()
 
-	if err := manager.handleTextResponseWithHooks(secondCtx, llm_common.LLMResponseStruct{
+	if err := manager.handleTextResponseWithHooks(secondCtx, llm.LLMResponse{
 		Text:    "第二轮开头",
 		IsStart: true,
 	}, false, nil, nil); err != nil {
@@ -153,7 +153,7 @@ func TestDualStreamIgnoresFragmentsFromPreviousTurn(t *testing.T) {
 	}
 
 	seqBefore := manager.ttsQueueSeq.Load()
-	if err := manager.handleTextResponseWithHooks(firstCtx, llm_common.LLMResponseStruct{
+	if err := manager.handleTextResponseWithHooks(firstCtx, llm.LLMResponse{
 		Text: "上一轮残留",
 	}, false, nil, nil); err != nil {
 		t.Fatalf("enqueue stale dual-stream fragment failed: %v", err)
@@ -162,7 +162,7 @@ func TestDualStreamIgnoresFragmentsFromPreviousTurn(t *testing.T) {
 		t.Fatalf("expected stale fragment not to enqueue fallback tts item, got seq=%d want=%d", got, seqBefore)
 	}
 
-	if err := manager.handleTextResponseWithHooks(secondCtx, llm_common.LLMResponseStruct{
+	if err := manager.handleTextResponseWithHooks(secondCtx, llm.LLMResponse{
 		Text: "第二轮续写",
 	}, false, nil, nil); err != nil {
 		t.Fatalf("enqueue second dual-stream continuation failed: %v", err)
@@ -218,7 +218,7 @@ func TestHandleLLMResponseChannelSyncSkipsTtsCommandsWhenContextAlreadyCanceled(
 	turnCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	responseChan := make(chan llm_common.LLMResponseStruct)
+	responseChan := make(chan llm.LLMResponse)
 	close(responseChan)
 
 	if _, err := session.llmManager.HandleLLMResponseChannelSync(turnCtx, nil, responseChan, nil); err != nil {
@@ -400,7 +400,7 @@ func TestRealtimeLLMNaturalEndEnqueuesTtsStop(t *testing.T) {
 	defer cleanup()
 	session.clientState.ListenMode = "realtime"
 
-	responseChan := make(chan llm_common.LLMResponseStruct)
+	responseChan := make(chan llm.LLMResponse)
 	close(responseChan)
 
 	if _, err := session.llmManager.HandleLLMResponseChannelSync(context.Background(), nil, responseChan, nil); err != nil {

@@ -3,7 +3,7 @@ package plugins
 import (
 	"testing"
 
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/chat/streamtransform"
 )
 
@@ -105,8 +105,8 @@ func TestOutputSegmenterFlushesBufferedTextBeforeToolCalls(t *testing.T) {
 
 	out, err = transformer.Transform(streamtransform.Item{
 		Kind: streamtransform.ItemKindToolCalls,
-		ToolCalls: []schema.ToolCall{
-			{ID: "call_1", Type: "function", Function: schema.FunctionCall{Name: "weather", Arguments: `{"city":"shanghai"}`}},
+		ToolCalls: []llm.ToolCall{
+			{ID: "call_1", Type: "function", Function: llm.ToolCallFunction{Name: "weather", Arguments: `{"city":"shanghai"}`}},
 		},
 	})
 	if err != nil {
@@ -149,13 +149,13 @@ func TestOutputSegmenterAggregatesToolCallsUntilBoundary(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	for _, tc := range []schema.ToolCall{
-		{ID: "call_1", Type: "function", Function: schema.FunctionCall{Name: "weather", Arguments: `{"city":"shanghai"}`}},
-		{ID: "call_2", Type: "function", Function: schema.FunctionCall{Name: "clock", Arguments: `{"timezone":"Asia/Shanghai"}`}},
+	for _, tc := range []llm.ToolCall{
+		{ID: "call_1", Type: "function", Function: llm.ToolCallFunction{Name: "weather", Arguments: `{"city":"shanghai"}`}},
+		{ID: "call_2", Type: "function", Function: llm.ToolCallFunction{Name: "clock", Arguments: `{"timezone":"Asia/Shanghai"}`}},
 	} {
 		out, err := transformer.Transform(streamtransform.Item{
 			Kind:      streamtransform.ItemKindToolCalls,
-			ToolCalls: []schema.ToolCall{tc},
+			ToolCalls: []llm.ToolCall{tc},
 		})
 		if err != nil {
 			t.Fatalf("Transform() error = %v", err)

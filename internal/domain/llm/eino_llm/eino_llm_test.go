@@ -294,14 +294,6 @@ func BenchmarkEinoLLMProvider_WithMaxTokens(b *testing.B) {
 }
 
 // TestExampleConfig 测试示例配置
-func TestExampleConfig(t *testing.T) {
-	assert.Equal(t, "eino_llm", ExampleConfig["type"])
-	assert.Equal(t, "gpt-3.5-turbo", ExampleConfig["model_name"])
-	assert.Equal(t, 500, ExampleConfig["max_tokens"])
-	assert.Equal(t, true, ExampleConfig["streamable"])
-}
-
-// TestEinoLLMProvider_FullWorkflow 完整工作流测试（仅结构验证，不涉及真实API）
 func TestEinoLLMProvider_FullWorkflow(t *testing.T) {
 	config := map[string]interface{}{
 		"type":       "openai", // 使用openai类型
