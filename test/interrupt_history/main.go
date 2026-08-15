@@ -9,15 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
+	"xiaozhi-esp32-server-golang/internal/domain/llm/factory"
 )
 
 type CaseResult struct {
 	Name        string
-	Messages    []*schema.Message
+	Messages    []*llm.Message
 	Response    string
 	ToolCalls   int
 	SkippedCall bool
@@ -100,22 +100,22 @@ func main() {
 	printSummary(caseNoAssistant, caseWithAssistant)
 }
 
-func buildNextTurnMessages(systemPrompt, firstUser, interruptedAssistant string, includeInterruptedAssistant bool, nextUser string) []*schema.Message {
-	ret := make([]*schema.Message, 0, 4)
+func buildNextTurnMessages(systemPrompt, firstUser, interruptedAssistant string, includeInterruptedAssistant bool, nextUser string) []*llm.Message {
+	ret := make([]*llm.Message, 0, 4)
 	if strings.TrimSpace(systemPrompt) != "" {
-		ret = append(ret, schema.SystemMessage(systemPrompt))
+		ret = append(ret, &llm.Message{Role: llm.RoleSystem, Content: systemPrompt})
 	}
-	ret = append(ret, schema.UserMessage(firstUser))
+	ret = append(ret, &llm.Message{Role: llm.RoleUser, Content: firstUser})
 
 	if includeInterruptedAssistant && strings.TrimSpace(interruptedAssistant) != "" {
-		msg := schema.AssistantMessage(interruptedAssistant, nil)
+		msg := &llm.Message{Role: llm.RoleAssistant, Content: interruptedAssistant}
 		/*msg.Extra = map[string]any{
 			"interrupted": true,
 		}*/
 		ret = append(ret, msg)
 	}
 
-	ret = append(ret, schema.UserMessage(nextUser))
+	ret = append(ret, &llm.Message{Role: llm.RoleUser, Content: nextUser})
 	return ret
 }
 
@@ -135,7 +135,7 @@ func printCaseInput(c CaseResult) {
 	}
 }
 
-func requestLLM(provider llm.LLMProvider, timeout time.Duration, sessionID, caseName string, messages []*schema.Message) (string, int, error) {
+func requestLLM(provider llm.LLMProvider, timeout time.Duration, sessionID, caseName string, messages []*llm.Message) (string, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -199,7 +199,7 @@ func buildLLMProviderFromConfig() (llm.LLMProvider, string, map[string]interface
 	}
 
 	normalizeLLMConfig(providerCfg)
-	provider, err := llm.GetLLMProvider(providerLabel, providerCfg)
+	provider, err := factory.GetLLMProvider(providerLabel, providerCfg)
 	if err != nil {
 		return nil, "", nil, err
 	}

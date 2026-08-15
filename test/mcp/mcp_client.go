@@ -67,12 +67,12 @@ func main() {
 			continue
 		}
 		fmt.Println("参数示例：")
-		if info.ParamsOneOf != nil {
+		if info.Params != nil {
 			// 尝试序列化为 JSON 美观输出
-			if b, err := json.MarshalIndent(info.ParamsOneOf, "", "  "); err == nil {
+			if b, err := json.MarshalIndent(info.Params, "", "  "); err == nil {
 				fmt.Println(string(b))
 			} else {
-				fmt.Printf("%+v\n", info.ParamsOneOf)
+				fmt.Printf("%+v\n", info.Params)
 			}
 		} else {
 			fmt.Println("  (无参数或未定义)")
@@ -164,7 +164,7 @@ func showGlobalTools(manager *GlobalMCPManager) {
 			fmt.Printf("   ❌ %s: 获取信息失败 - %v\n", name, err)
 			continue
 		}
-		fmt.Printf("   ✓ %s: %s,%+v\n", info.Name, info.Desc, info.ParamsOneOf)
+		fmt.Printf("   ✓ %s: %s,%+v\n", info.Name, info.Desc, info.Params)
 	}
 }
 
