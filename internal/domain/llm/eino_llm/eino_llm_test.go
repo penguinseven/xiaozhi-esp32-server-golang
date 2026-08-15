@@ -1,12 +1,15 @@
 package eino_llm
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 func TestNewEinoLLMProvider(t *testing.T) {
@@ -82,27 +85,6 @@ func TestNewEinoLLMProvider(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestEinoLLMProvider_GetModelInfo(t *testing.T) {
-	config := map[string]interface{}{
-		"type":       "openai",
-		"model_name": "gpt-3.5-turbo",
-		"api_key":    "test-key",
-		"max_tokens": 1000,
-	}
-
-	provider, err := NewEinoLLMProvider(config)
-	require.NoError(t, err)
-
-	info := provider.GetModelInfo()
-
-	assert.Equal(t, "eino", info["framework"])
-	assert.Equal(t, "eino", info["type"])
-	assert.Equal(t, "openai", info["provider_type"])
-	assert.Equal(t, "3.0.0", info["adapter_version"])
-	assert.Equal(t, true, info["streamable"])
-	assert.Contains(t, info, "model_name")
 }
 
 func TestEinoLLMProvider_WithMaxTokens(t *testing.T) {
@@ -183,24 +165,24 @@ func TestEinoLLMProvider_ResponseWithEinoMessages(t *testing.T) {
 	provider, err := NewEinoLLMProvider(config)
 	require.NoError(t, err)
 
-	// 使用Eino原生消息类型
-	messages := []*schema.Message{
+	// 使用领域消息类型
+	messages := []*llm.Message{
 		{
-			Role:    schema.System,
+			Role:    llm.RoleSystem,
 			Content: "你是一个助手",
 		},
 		{
-			Role:    schema.User,
+			Role:    llm.RoleUser,
 			Content: "你好",
 		},
 	}
 
-	// 测试Response方法 - 注意：这将尝试真实API调用
+	// 测试ResponseWithContext方法 - 注意：这将尝试真实API调用
 	// 在没有真实API密钥的情况下，这会失败，但我们主要测试结构
-	responseChan := provider.Response("test_session", messages)
+	responseChan := provider.ResponseWithContext(context.Background(), "test_session", messages, nil)
 	var responses []string
 	for content := range responseChan {
-		responses = append(responses, content)
+		responses = append(responses, content.Content)
 		break // 只获取第一个响应以避免长时间等待
 	}
 
@@ -237,8 +219,8 @@ func TestEinoLLMProvider_ResponseWithFunctionsEinoTypes(t *testing.T) {
 		},
 	}
 
-	// 测试ResponseWithFunctions方法 - 仅验证结构
-	responseChan := provider.ResponseWithFunctions("test_session", messages, tools)
+	// 测试EinoResponseWithTools方法 - 仅验证结构
+	responseChan := provider.EinoResponseWithTools(context.Background(), "test_session", messages, tools)
 	go func() {
 		for range responseChan {
 			// 消费响应但不验证内容
@@ -276,16 +258,16 @@ func BenchmarkEinoLLMProvider_Response(b *testing.B) {
 	}
 
 	provider, _ := NewEinoLLMProvider(config)
-	messages := []*schema.Message{
+	messages := []*llm.Message{
 		{
-			Role:    schema.User,
+			Role:    llm.RoleUser,
 			Content: "这是一个性能测试的内容",
 		},
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		responseChan := provider.Response("bench_session", messages)
+		responseChan := provider.ResponseWithContext(context.Background(), "bench_session", messages, nil)
 		// 消费响应以完成调用
 		go func() {
 			for range responseChan {
@@ -339,30 +321,24 @@ func TestEinoLLMProvider_FullWorkflow(t *testing.T) {
 	assert.Equal(t, 1000, enhancedProvider.maxTokens)
 	assert.Equal(t, false, enhancedProvider.streamable)
 
-	// 3. 测试模型信息获取
-	info := enhancedProvider.GetModelInfo()
-	assert.Equal(t, "eino", info["framework"])
-	assert.Equal(t, "eino", info["type"])
-	assert.Equal(t, "openai", info["provider_type"])
-
-	// 4. 测试底层ChatModel访问
+	// 3. 测试底层ChatModel访问
 	chatModel := enhancedProvider.GetChatModel()
 	assert.NotNil(t, chatModel)
 
-	// 5. 测试提供者类型
+	// 4. 测试提供者类型
 	providerType := enhancedProvider.GetProviderType()
 	assert.Equal(t, "openai", providerType)
 
-	// 6. 测试结构验证（不调用真实API）
-	messages := []*schema.Message{
+	// 5. 测试结构验证（不调用真实API）
+	messages := []*llm.Message{
 		{
-			Role:    schema.User,
+			Role:    llm.RoleUser,
 			Content: "测试消息",
 		},
 	}
 
 	// 仅验证函数调用不会panic，不验证响应内容
-	responseChan := provider.Response("full_workflow_test", messages)
+	responseChan := provider.ResponseWithContext(context.Background(), "full_workflow_test", messages, nil)
 	go func() {
 		for range responseChan {
 			// 消费响应但不验证内容
@@ -408,15 +384,15 @@ func TestMultipleProviderTypes(t *testing.T) {
 			assert.Equal(t, tc.modelName, provider.modelName)
 
 			// 测试基本结构
-			messages := []*schema.Message{
+			messages := []*llm.Message{
 				{
-					Role:    schema.User,
+					Role:    llm.RoleUser,
 					Content: fmt.Sprintf("测试%s提供者", tc.providerType),
 				},
 			}
 
 			// 仅验证函数调用不会panic
-			responseChan := provider.Response("multi_provider_test", messages)
+			responseChan := provider.ResponseWithContext(context.Background(), "multi_provider_test", messages, nil)
 			go func() {
 				for range responseChan {
 					// 消费响应

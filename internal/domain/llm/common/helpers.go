@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudwego/eino/schema"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 )
 
 // BuildPromptFromDialogue flattens message history into a single text prompt.
-func BuildPromptFromDialogue(dialogue []*schema.Message) string {
+func BuildPromptFromDialogue(dialogue []*llm.Message) string {
 	if len(dialogue) == 0 {
 		return ""
 	}
@@ -26,7 +26,7 @@ func BuildPromptFromDialogue(dialogue []*schema.Message) string {
 			continue
 		}
 
-		content := strings.TrimSpace(extractMessageText(msg))
+		content := strings.TrimSpace(msg.Content)
 		if content == "" {
 			continue
 		}
@@ -67,58 +67,19 @@ func BuildStableUserID(prefix, sessionID string) string {
 	return safePrefix + "_" + suffix
 }
 
-func formatRole(role schema.RoleType) string {
+func formatRole(role llm.MessageRole) string {
 	switch role {
-	case schema.System:
+	case llm.RoleSystem:
 		return "System"
-	case schema.User:
+	case llm.RoleUser:
 		return "User"
-	case schema.Assistant:
+	case llm.RoleAssistant:
 		return "Assistant"
-	case schema.Tool:
+	case llm.RoleTool:
 		return "Tool"
 	default:
 		return "Message"
 	}
-}
-
-func extractMessageText(msg *schema.Message) string {
-	if msg == nil {
-		return ""
-	}
-
-	content := strings.TrimSpace(msg.Content)
-	if content != "" {
-		return content
-	}
-
-	if len(msg.MultiContent) > 0 {
-		parts := make([]string, 0, len(msg.MultiContent))
-		for _, part := range msg.MultiContent {
-			text := strings.TrimSpace(part.Text)
-			if text != "" {
-				parts = append(parts, text)
-			}
-		}
-		if len(parts) > 0 {
-			return strings.Join(parts, "\n")
-		}
-	}
-
-	if len(msg.ToolCalls) > 0 {
-		names := make([]string, 0, len(msg.ToolCalls))
-		for _, toolCall := range msg.ToolCalls {
-			name := strings.TrimSpace(toolCall.Function.Name)
-			if name != "" {
-				names = append(names, name)
-			}
-		}
-		if len(names) > 0 {
-			return "tool calls: " + strings.Join(names, ", ")
-		}
-	}
-
-	return ""
 }
 
 func sanitizeUserIDPart(s string) string {

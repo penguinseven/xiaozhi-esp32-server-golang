@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/schema"
 	sse "github.com/tmaxmax/go-sse"
 )
 
@@ -24,7 +24,6 @@ const (
 	defaultCozeBaseURL  = "https://api.coze.com"
 	defaultConnectorID  = "1024"
 	defaultUserPrefix   = "xiaozhi"
-	llmExtraErrorKey    = "error"
 	streamCreatePath    = "/v3/chat"
 	maxIdleConns        = 200
 	maxIdleConnsPerHost = 50
@@ -153,8 +152,8 @@ func NewCozeLLMProvider(config map[string]interface{}) (*CozeLLMProvider, error)
 	}, nil
 }
 
-func (p *CozeLLMProvider) ResponseWithContext(ctx context.Context, sessionID string, dialogue []*schema.Message, _ []*schema.ToolInfo) chan *schema.Message {
-	out := make(chan *schema.Message, 200)
+func (p *CozeLLMProvider) ResponseWithContext(ctx context.Context, sessionID string, dialogue []*llm.Message, _ []*llm.Tool) <-chan *llm.Message {
+	out := make(chan *llm.Message, 200)
 
 	go func() {
 		defer close(out)
@@ -247,16 +246,16 @@ func (p *CozeLLMProvider) ResponseWithContext(ctx context.Context, sessionID str
 				content := extractCozeMessageContent(data, streamEvent)
 				if content != "" {
 					seenDelta = true
-					out <- &schema.Message{
-						Role:    schema.Assistant,
+					out <- &llm.Message{
+						Role:    llm.RoleAssistant,
 						Content: content,
 					}
 				}
 			case "conversation.message.completed":
 				content := extractCozeMessageContent(data, streamEvent)
 				if content != "" && !seenDelta {
-					out <- &schema.Message{
-						Role:    schema.Assistant,
+					out <- &llm.Message{
+						Role:    llm.RoleAssistant,
 						Content: content,
 					}
 				}
@@ -271,8 +270,8 @@ func (p *CozeLLMProvider) ResponseWithContext(ctx context.Context, sessionID str
 				content := extractCozeMessageContent(data, streamEvent)
 				if content != "" {
 					seenDelta = true
-					out <- &schema.Message{
-						Role:    schema.Assistant,
+					out <- &llm.Message{
+						Role:    llm.RoleAssistant,
 						Content: content,
 					}
 				}
@@ -380,7 +379,7 @@ func (p *CozeLLMProvider) setConversationID(sessionID, conversationID string) {
 	p.conversationIDs[sessionID] = conversationID
 }
 
-func buildCozeQuery(dialogue []*schema.Message) string {
+func buildCozeQuery(dialogue []*llm.Message) string {
 	if len(dialogue) == 0 {
 		return ""
 	}
@@ -388,7 +387,7 @@ func buildCozeQuery(dialogue []*schema.Message) string {
 	// Coze会话模式仅发送当前轮用户输入，不拼接本地历史。
 	for i := len(dialogue) - 1; i >= 0; i-- {
 		msg := dialogue[i]
-		if msg == nil || msg.Role != schema.User {
+		if msg == nil || msg.Role != llm.RoleUser {
 			continue
 		}
 		if text := extractCozeQueryText(msg); text != "" {
@@ -406,27 +405,14 @@ func buildCozeQuery(dialogue []*schema.Message) string {
 	return ""
 }
 
-func extractCozeQueryText(msg *schema.Message) string {
+func extractCozeQueryText(msg *llm.Message) string {
 	if msg == nil {
 		return ""
 	}
 	if text := strings.TrimSpace(msg.Content); text != "" {
 		return text
 	}
-	if len(msg.MultiContent) == 0 {
-		return ""
-	}
-
-	parts := make([]string, 0, len(msg.MultiContent))
-	for _, part := range msg.MultiContent {
-		if text := strings.TrimSpace(part.Text); text != "" {
-			parts = append(parts, text)
-		}
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return strings.Join(parts, "\n")
+	return ""
 }
 
 func extractCozeConversationID(event cozeStreamEvent, data string) string {
@@ -618,17 +604,6 @@ func (p *CozeLLMProvider) ResponseWithVllm(_ context.Context, _ []byte, _ string
 	return "", fmt.Errorf("coze provider不支持vllm能力")
 }
 
-func (p *CozeLLMProvider) GetModelInfo() map[string]interface{} {
-	return map[string]interface{}{
-		"type":         "coze",
-		"provider":     "coze",
-		"base_url":     p.baseURL,
-		"bot_id":       p.botID,
-		"user_prefix":  p.userPrefix,
-		"connector_id": p.connectorID,
-	}
-}
-
 func (p *CozeLLMProvider) Close() error {
 	return nil
 }
@@ -637,10 +612,10 @@ func (p *CozeLLMProvider) IsValid() bool {
 	return p != nil && p.apiKey != "" && p.botID != ""
 }
 
-func sendLLMError(ch chan *schema.Message, err error) {
-	ch <- &schema.Message{
-		Role:  schema.System,
-		Extra: map[string]any{llmExtraErrorKey: err.Error()},
+func sendLLMError(ch chan *llm.Message, err error) {
+	ch <- &llm.Message{
+		Role:  llm.RoleSystem,
+		Extra: map[string]any{llm.LLMExtraErrorKey: err.Error()},
 	}
 }
 

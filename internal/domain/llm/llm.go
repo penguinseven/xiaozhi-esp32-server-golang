@@ -4,30 +4,28 @@ import (
 	"context"
 
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
-
-	"github.com/cloudwego/eino/schema"
 )
 
-// ConvertMCPToolsToEinoTools 将MCP工具转换为Eino ToolInfo格式
-func ConvertMCPToolsToEinoTools(ctx context.Context, mcpTools map[string]interface{}) ([]*schema.ToolInfo, error) {
-	var einoTools []*schema.ToolInfo
+// ConvertMCPToolsToLLMTools 将MCP工具转换为领域 Tool 列表
+func ConvertMCPToolsToLLMTools(ctx context.Context, mcpTools map[string]interface{}) ([]*Tool, error) {
+	var tools []*Tool
 
 	for toolName, mcpTool := range mcpTools {
-		// 尝试获取工具信息
-		if invokableTool, ok := mcpTool.(interface {
-			Info(context.Context) (*schema.ToolInfo, error)
-		}); ok {
-			toolInfo, err := invokableTool.Info(ctx)
+		// 仅需要工具的元信息（Info），由实现方返回领域 Tool
+		if invokableTool, ok := mcpTool.(InvokableTool); ok {
+			tool, err := invokableTool.Info(ctx)
 			if err != nil {
 				log.Errorf("获取工具 %s 信息失败: %v", toolName, err)
 				continue
 			}
-			einoTools = append(einoTools, toolInfo)
+			if tool != nil {
+				tools = append(tools, tool)
+			}
 		} else {
-			log.Warnf("工具 %s 不支持Info接口，跳过转换", toolName)
+			log.Warnf("工具 %s 不支持 Info 接口，跳过转换", toolName)
 		}
 	}
 
-	log.Infof("成功转换了 %d 个MCP工具为Eino工具", len(einoTools))
-	return einoTools, nil
+	log.Infof("成功转换了 %d 个MCP工具为LLM工具", len(tools))
+	return tools, nil
 }

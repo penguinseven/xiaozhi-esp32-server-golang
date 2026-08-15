@@ -17,6 +17,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 )
 
@@ -241,52 +242,40 @@ func createOllamaChatModel(config map[string]interface{}) (model.ToolCallingChat
 	return chatModel, nil
 }
 
-// GetModelInfo 获取模型信息
-func (p *EinoLLMProvider) GetModelInfo() map[string]interface{} {
-	return map[string]interface{}{
-		"model_name":      p.modelName,
-		"max_tokens":      p.maxTokens,
-		"streamable":      p.streamable,
-		"type":            "eino",
-		"provider_type":   p.providerType,
-		"framework":       "eino",
-		"adapter_version": "3.0.0",
-		"base_url":        p.config["base_url"],
-	}
-}
-
-// ResponseWithFunctions 带函数调用的响应，使用Eino原生工具类型，直接调用EinoResponseWithTools
-func (p *EinoLLMProvider) ResponseWithContext(ctx context.Context, sessionID string, dialogue []*schema.Message, functions []*schema.ToolInfo) chan *schema.Message {
-
+// ResponseWithContext 带工具/对话的领域签名响应：入参出参均为 llm.* 领域类型
+func (p *EinoLLMProvider) ResponseWithContext(ctx context.Context, sessionID string, dialogue []*llm.Message, functions []*llm.Tool) <-chan *llm.Message {
 	log.Infof("[Eino-LLM] 开始处理带工具的请求 - SessionID: %s, Type: %s", sessionID, p.providerType)
 
 	logMessages(dialogue)
-	// 直接调用EinoResponseWithTools获取Eino原生响应
-	einoResponseChan := p.EinoResponseWithTools(ctx, sessionID, dialogue, functions)
+	einoResponseChan := p.EinoResponseWithTools(ctx, sessionID, toEinoMessages(dialogue), toEinoTools(functions))
+
+	out := make(chan *llm.Message, 200)
+	go func() {
+		defer close(out)
+		for m := range einoResponseChan {
+			out <- fromEinoMessage(m)
+		}
+	}()
 
 	log.Infof("[Eino-LLM] 工具调用请求处理完成 - SessionID: %s", sessionID)
-
-	return einoResponseChan
+	return out
 }
 
-func logMessages(messages []*schema.Message) {
+func logMessages(messages []*llm.Message) {
 	for _, msg := range messages {
 		if msg == nil {
 			log.Debugf("history llm msg: <nil>")
 			continue
 		}
-		log.Debugf("history llm msg: %s\n", msg.String())
+		log.Debugf("history llm msg: role=%s content=%s toolCalls=%d\n", msg.Role, msg.Content, len(msg.ToolCalls))
 	}
 }
 
-// llmExtraErrorKey 与 domain/llm.LLMExtraErrorKey 保持一致，失败时透传错误用（避免循环依赖）
-const llmExtraErrorKey = "error"
-
-// sendLLMError 向 channel 发送带 Extra.error 的错误消息
-func sendLLMError(ch chan *schema.Message, err error) {
+// sendEinoError 向内部 eino channel 发送带 Extra.error 的错误消息（桥接层会转换为领域 Message）
+func sendEinoError(ch chan *schema.Message, err error) {
 	ch <- &schema.Message{
 		Role:  schema.System,
-		Extra: map[string]any{llmExtraErrorKey: err.Error()},
+		Extra: map[string]any{llm.LLMExtraErrorKey: err.Error()},
 	}
 }
 
@@ -308,7 +297,7 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 			p.chatModel, err = p.chatModel.WithTools(tools)
 			if err != nil {
 				log.Errorf("绑定工具失败: %v", err)
-				sendLLMError(responseChan, err)
+				sendEinoError(responseChan, err)
 				return
 			}
 		}
@@ -323,7 +312,7 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 				message, genErr := p.chatModel.Generate(ctx, messages, p.buildModelCallOptions()...)
 				if genErr != nil {
 					log.Errorf("Eino工具生成响应失败: %v", genErr)
-					sendLLMError(responseChan, genErr)
+					sendEinoError(responseChan, genErr)
 					return
 				}
 				if message != nil {
@@ -346,7 +335,7 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 					//log.Debugf("streamReader.Recv() message: %+v", message)
 					if err == io.EOF {
 						if streamChunkCount == 0 {
-							sendLLMError(responseChan, errors.New("流式响应为空"))
+							sendEinoError(responseChan, errors.New("流式响应为空"))
 							break
 						}
 						// 如果有未完成的工具调用，发送最后一次
@@ -369,7 +358,7 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 							break
 						}
 						log.Errorf("接收流式响应失败: %v", err)
-						sendLLMError(responseChan, err)
+						sendEinoError(responseChan, err)
 						break
 					}
 
@@ -416,14 +405,14 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 					}
 				}
 			} else {
-				sendLLMError(responseChan, errors.New("流式响应为空"))
+				sendEinoError(responseChan, errors.New("流式响应为空"))
 			}
 		} else {
 			// 直接使用Eino的Generate方法
 			message, err := p.chatModel.Generate(ctx, messages, p.buildModelCallOptions()...)
 			if err != nil {
 				log.Errorf("Eino工具生成响应失败: %v", err)
-				sendLLMError(responseChan, err)
+				sendEinoError(responseChan, err)
 				return
 			}
 

@@ -40,7 +40,7 @@ func (p *EinoLLMProvider) ResponseWithVllm(ctx context.Context, file []byte, tex
 		},
 		msg,
 	}
-	responseChan := p.ResponseWithContext(ctx, "", dialogue, []*schema.ToolInfo{})
+	responseChan := p.EinoResponseWithTools(ctx, "", dialogue, nil)
 	if responseChan == nil {
 		log.Errorf("[Eino-VLLM] 调用视觉api请求处理失败 - responseChan为nil")
 		return "", fmt.Errorf("调用视觉api请求处理失败 - responseChan为nil")

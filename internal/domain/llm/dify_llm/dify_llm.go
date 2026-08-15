@@ -13,17 +13,16 @@ import (
 	"sync"
 	"time"
 
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	llm_common "xiaozhi-esp32-server-golang/internal/domain/llm/common"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
 
-	"github.com/cloudwego/eino/schema"
 	sse "github.com/tmaxmax/go-sse"
 )
 
 const (
 	defaultDifyBaseURL = "https://api.dify.ai/v1"
 	defaultUserPrefix  = "xiaozhi"
-	llmExtraErrorKey   = "error"
 
 	maxIdleConns        = 200
 	maxIdleConnsPerHost = 50
@@ -122,8 +121,8 @@ func NewDifyLLMProvider(config map[string]interface{}) (*DifyLLMProvider, error)
 	}, nil
 }
 
-func (p *DifyLLMProvider) ResponseWithContext(ctx context.Context, sessionID string, dialogue []*schema.Message, _ []*schema.ToolInfo) chan *schema.Message {
-	out := make(chan *schema.Message, 200)
+func (p *DifyLLMProvider) ResponseWithContext(ctx context.Context, sessionID string, dialogue []*llm.Message, _ []*llm.Tool) <-chan *llm.Message {
+	out := make(chan *llm.Message, 200)
 
 	go func() {
 		defer close(out)
@@ -215,8 +214,8 @@ func (p *DifyLLMProvider) ResponseWithContext(ctx context.Context, sessionID str
 				return
 			case "message", "agent_message":
 				if streamEvent.Answer != "" {
-					out <- &schema.Message{
-						Role:    schema.Assistant,
+					out <- &llm.Message{
+						Role:    llm.RoleAssistant,
 						Content: streamEvent.Answer,
 					}
 				}
@@ -225,8 +224,8 @@ func (p *DifyLLMProvider) ResponseWithContext(ctx context.Context, sessionID str
 			default:
 				// Some providers only carry textual chunks and no stable event name.
 				if streamEvent.Answer != "" {
-					out <- &schema.Message{
-						Role:    schema.Assistant,
+					out <- &llm.Message{
+						Role:    llm.RoleAssistant,
 						Content: streamEvent.Answer,
 					}
 				}
@@ -290,7 +289,7 @@ func (p *DifyLLMProvider) ResponseWithVllm(_ context.Context, _ []byte, _ string
 	return "", fmt.Errorf("dify provider不支持vllm能力")
 }
 
-func buildDifyQuery(dialogue []*schema.Message) string {
+func buildDifyQuery(dialogue []*llm.Message) string {
 	if len(dialogue) == 0 {
 		return ""
 	}
@@ -298,7 +297,7 @@ func buildDifyQuery(dialogue []*schema.Message) string {
 	// Dify会话模式下仅发送当前轮输入，不在query中拼接历史。
 	for i := len(dialogue) - 1; i >= 0; i-- {
 		msg := dialogue[i]
-		if msg == nil || msg.Role != schema.User {
+		if msg == nil || msg.Role != llm.RoleUser {
 			continue
 		}
 		if text := extractDifyMessageText(msg); text != "" {
@@ -316,34 +315,14 @@ func buildDifyQuery(dialogue []*schema.Message) string {
 	return ""
 }
 
-func extractDifyMessageText(msg *schema.Message) string {
+func extractDifyMessageText(msg *llm.Message) string {
 	if msg == nil {
 		return ""
 	}
 	if text := strings.TrimSpace(msg.Content); text != "" {
 		return text
 	}
-	if len(msg.MultiContent) > 0 {
-		parts := make([]string, 0, len(msg.MultiContent))
-		for _, part := range msg.MultiContent {
-			if text := strings.TrimSpace(part.Text); text != "" {
-				parts = append(parts, text)
-			}
-		}
-		if len(parts) > 0 {
-			return strings.Join(parts, "\n")
-		}
-	}
 	return ""
-}
-
-func (p *DifyLLMProvider) GetModelInfo() map[string]interface{} {
-	return map[string]interface{}{
-		"type":        "dify",
-		"provider":    "dify",
-		"base_url":    p.baseURL,
-		"user_prefix": p.userPrefix,
-	}
 }
 
 func (p *DifyLLMProvider) Close() error {
@@ -354,10 +333,10 @@ func (p *DifyLLMProvider) IsValid() bool {
 	return p != nil && p.apiKey != "" && p.baseURL != ""
 }
 
-func sendLLMError(ch chan *schema.Message, err error) {
-	ch <- &schema.Message{
-		Role:  schema.System,
-		Extra: map[string]any{llmExtraErrorKey: err.Error()},
+func sendLLMError(ch chan *llm.Message, err error) {
+	ch <- &llm.Message{
+		Role:  llm.RoleSystem,
+		Extra: map[string]any{llm.LLMExtraErrorKey: err.Error()},
 	}
 }
 
