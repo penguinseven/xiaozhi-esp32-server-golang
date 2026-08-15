@@ -10,18 +10,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudwego/eino/components/tool"
-	einoschema "github.com/cloudwego/eino/schema"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	cmap "github.com/orcaman/concurrent-map/v2"
 
 	"xiaozhi-esp32-server-golang/internal/domain/config/types"
+	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/mcp"
 	"xiaozhi-esp32-server-golang/internal/domain/openclaw"
-	"xiaozhi-esp32-server-golang/internal/util"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	"xiaozhi-esp32-server-golang/internal/util"
 )
 
 type MessageHandleFunc func(*WebSocketRequest) (string, error)
@@ -976,50 +975,7 @@ func mapToStruct(data map[string]interface{}, target interface{}) error {
 	return json.Unmarshal(jsonData, target)
 }
 
-func toolInfoToSchemaMap(paramsOneOf interface{}) map[string]interface{} {
-	if paramsOneOf == nil {
-		return nil
-	}
-
-	// ParamsOneOf 内部字段未导出，直接 json.Marshal 可能得到 {}。
-	// 优先走官方 ToOpenAPIV3()，确保能取到真实参数 schema。
-	if p, ok := paramsOneOf.(*einoschema.ParamsOneOf); ok && p != nil {
-		if openAPISchema, err := p.ToOpenAPIV3(); err == nil && openAPISchema != nil {
-			raw, err := json.Marshal(openAPISchema)
-			if err == nil {
-				decoded := map[string]interface{}{}
-				if err = json.Unmarshal(raw, &decoded); err == nil {
-					if len(decoded) > 0 {
-						return decoded
-					}
-				}
-			}
-		}
-	}
-
-	raw, err := json.Marshal(paramsOneOf)
-	if err != nil {
-		return nil
-	}
-
-	decoded := map[string]interface{}{}
-	if err = json.Unmarshal(raw, &decoded); err != nil {
-		return nil
-	}
-
-	if openAPIV3, ok := decoded["openAPIV3"].(map[string]interface{}); ok {
-		return openAPIV3
-	}
-	if openAPIV3, ok := decoded["open_api_v3"].(map[string]interface{}); ok {
-		return openAPIV3
-	}
-	if len(decoded) == 0 {
-		return nil
-	}
-	return decoded
-}
-
-func convertReportedToolsToToolList(reportedTools map[string]tool.InvokableTool) ([]map[string]interface{}, error) {
+func convertReportedToolsToToolList(reportedTools map[string]llm.InvokableTool) ([]map[string]interface{}, error) {
 	toolList := make([]map[string]interface{}, 0)
 
 	names := make([]string, 0, len(reportedTools))
@@ -1040,9 +996,8 @@ func convertReportedToolsToToolList(reportedTools map[string]tool.InvokableTool)
 			if info.Desc != "" {
 				toolInfo["description"] = info.Desc
 			}
-			inputSchema := toolInfoToSchemaMap(info.ParamsOneOf)
-			if inputSchema != nil {
-				toolInfo["input_schema"] = inputSchema
+			if len(info.Params) > 0 {
+				toolInfo["input_schema"] = info.Params
 			}
 		}
 
@@ -1284,7 +1239,7 @@ func (c *WebSocketClient) handleMcpToolCallRequest(request *WebSocketRequest) {
 	}
 
 	var (
-		invokable tool.InvokableTool
+		invokable llm.InvokableTool
 		ok        bool
 	)
 	if deviceID != "" {

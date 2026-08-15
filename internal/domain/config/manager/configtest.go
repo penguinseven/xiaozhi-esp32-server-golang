@@ -3,22 +3,20 @@ package manager
 import (
 	"context"
 	"encoding/json"
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
 	"io"
 	"math"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/schema"
-	"github.com/go-audio/audio"
-	"github.com/go-audio/wav"
-
 	"xiaozhi-esp32-server-golang/internal/domain/asr"
 	"xiaozhi-esp32-server-golang/internal/domain/llm"
 	"xiaozhi-esp32-server-golang/internal/domain/tts"
 	"xiaozhi-esp32-server-golang/internal/domain/vad/inter"
-	"xiaozhi-esp32-server-golang/internal/pool"
 	log "xiaozhi-esp32-server-golang/internal/pkg/logger"
+	"xiaozhi-esp32-server-golang/internal/pool"
 )
 
 // DefaultTestWavPath 配置测试用固定 WAV 路径（16kHz 单声道，约 1–3 秒），可选
@@ -255,11 +253,11 @@ func RunConfigTest(data map[string]interface{}, testText string) (vadResult, asr
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			t0 := time.Now()
-			msgChan := llmProvider.ResponseWithContext(ctx, "config_test", []*schema.Message{
-				{Role: "user", Content: testText},
+			msgChan := llmProvider.ResponseWithContext(ctx, "config_test", []*llm.Message{
+				{Role: llm.RoleUser, Content: testText},
 			}, nil)
 			var gotMessage bool
-			var firstMsg *schema.Message
+			var firstMsg *llm.Message
 			var firstPacketMs int64
 			for msg := range msgChan {
 				if msg != nil {
