@@ -4,7 +4,7 @@
     "listen_port": 2883,
     "client_id": "xiaozhi_server",
     "username": "admin",
-    "password": "shijingbo!@#",
+    "password": "",
     "signature_key": "mqtt_auth_key",
     "enable_auth": false,
     "tls": {

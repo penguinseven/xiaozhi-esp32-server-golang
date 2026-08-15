@@ -34,8 +34,8 @@ config_provider:          #对应domain/config/中的provider
 
 manager:                  #内控管理配置, 对应domain/config/manager/manager.go
   backend_url: "http://127.0.0.1:8080" #内控地址
-  auth_token: "xiaozhi_admin_secret_key" # 控制台内部HTTP接口调用Token（默认值）
-  endpoint_auth_token: "xiaozhi_mcp_openclaw_secret_key" # MCP/OpenClaw端点JWT签名校验Token（默认值）
+  auth_token: "" # 控制台内部HTTP接口调用Token（默认值）
+  endpoint_auth_token: "" # MCP/OpenClaw端点JWT签名校验Token（默认值）
   history_timeout: 5s        # HTTP请求超时时间
 
 # 系统提示词，定义AI助手的角色和行为
@@ -54,7 +54,7 @@ log:
 redis:
   host: "127.0.0.1"      # Redis服务器地址
   port: 6379             # Redis端口
-  password: "ticket_dev" # Redis密码
+  password: "" # Redis密码
   db: 0                  # 使用的数据库编号
   key_prefix: "xiaozhi"  # 键名前缀
 
@@ -71,7 +71,7 @@ mqtt:
   port: 2883                  # MQTT端口
   client_id: "xiaozhi_server" # 客户端ID
   username: "admin"           # MQTT用户名
-  password: "test!@#"         # MQTT密码
+  password: ""         # MQTT密码
 
 # MQTT服务器配置（作为MQTT服务器运行）
 mqtt_server:
@@ -80,7 +80,7 @@ mqtt_server:
   listen_port: 2883                     # 监听端口
   client_id: "xiaozhi_server"           # 服务器客户端ID
   username: "admin"                     # 默认用户名
-  password: "test!@#"                   # 默认密码
+  password: ""                   # 默认密码
   signature_key: "your_ota_signature_key_here"  # OTA更新签名密钥
   enable_auth: false                    # 是否启用身份验证
   # TLS安全连接配置
@@ -162,7 +162,7 @@ asr:
   # Doubao ASR config
   doubao:
     appid: "4170815771"                    # 应用ID
-    access_token: "lBGmAR-5RH6OJWiPYo0nxv3GzIMLFKO6"          # 访问令牌
+    access_token: ""          # 访问令牌
     ws_url: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_nostream"  # WebSocket URL
     model_name: "bigmodel"          # 模型名称
     end_window_size: 800            # 结束窗口大小
@@ -205,7 +205,7 @@ tts:
   # 豆包TTS配置（WebSocket方式），支持流式输出
   doubao_ws:
     appid: "4170815771"                         # 应用ID
-    access_token: "lBGmAR-5RH6OJWiPYo0nxv3GzIMLFKO6"                # 访问令牌
+    access_token: ""                # 访问令牌
     model: "seed-tts-1.1"                       # 模型
     resource_id: ""                             # 可选，建议填写控制台里的实例 ID，如 TTS-SeedTTS2.xxxxx
     voice: "BV001_streaming" # 语音模型（通用免费音色）
@@ -295,7 +295,7 @@ llm:
   deepseek_v4_flash:
     type: "openai"                               # 接口类型
     model_name: "deepseek-v4-flash"             # 模型名称（DeepSeek 官方模型名）
-    api_key: "sk-b479d79951b0437e87f425dc507e0fba"          # DeepSeek 官网 https://platform.deepseek.com/api_keys
+    api_key: ""          # DeepSeek 官网 https://platform.deepseek.com/api_keys
     base_url: "https://api.deepseek.com"         # API基础地址（DeepSeek 官方）
     max_tokens: 500                              # 最大生成token数
   # DeepSeek V2.5模型配置（硅基流动平台）
